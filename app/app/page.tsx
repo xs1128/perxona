@@ -45,6 +45,12 @@ const presenterUrls: Record<Region, string> = {
   eu: 'https://cdn.perxona.ai/eu/prod/latest/widget/entry/presenter.js',
 };
 
+const localPublishableKey =
+  import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? '';
+const localAvatarId = import.meta.env.VITE_PERXONA_AVATAR_ID ?? '';
+const localSceneId = import.meta.env.VITE_PERXONA_SCENE_ID ?? '';
+const localVoiceId = import.meta.env.VITE_PERXONA_VOICE_ID ?? '';
+
 export default function Home() {
   const presenterRef = useRef<PresenterElement | null>(null);
   const [message, setMessage] = useState(
@@ -55,10 +61,10 @@ export default function Home() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [liveMode, setLiveMode] = useState(false);
   const [region, setRegion] = useState<Region>('asia');
-  const [connectKey, setConnectKey] = useState('');
-  const [avatarId, setAvatarId] = useState('');
-  const [sceneId, setSceneId] = useState('');
-  const [voiceId, setVoiceId] = useState('');
+  const [connectKey, setConnectKey] = useState(localPublishableKey);
+  const [avatarId, setAvatarId] = useState(localAvatarId);
+  const [sceneId, setSceneId] = useState(localSceneId);
+  const [voiceId, setVoiceId] = useState(localVoiceId);
 
   useEffect(() => {
     const presenter = presenterRef.current;

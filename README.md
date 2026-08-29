@@ -25,3 +25,13 @@ npm run dev
 ```
 
 The demo keeps the Publishable key in memory only. Do not use a Secret key in the browser.
+
+For local Vite defaults, create an ignored `app/.env.local` file with the
+organization-specific values:
+
+```dotenv
+VITE_PERXONA_CONNECT_PUBLISHABLE_KEY=pxc_...
+VITE_PERXONA_AVATAR_ID=your-avatar-id
+VITE_PERXONA_SCENE_ID=your-scene-id
+VITE_PERXONA_VOICE_ID=your-voice-id
+```
