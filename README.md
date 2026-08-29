@@ -14,9 +14,22 @@ Start with the [documentation index](docs/perxona-connect-kit/README.md).
 
 Research was last verified on 2026-08-29. Recheck the official sources before implementation because APIs, access restrictions, pricing, and preview behavior may change.
 
-## Minimal demo
+## Demo application
 
-The runnable single-screen Presenter demo is in [`app/`](app/). It works immediately in browser-voice demo mode. To use a live Perxona Avatar, open **Setup** and enter a domain-restricted Publishable key plus the target Avatar, Scene, and optional Voice IDs.
+The runnable single-screen Presenter demo is in [`app/`](app/). It works immediately in browser-voice demo mode. To use a live Perxona Avatar, open **Setup** and enter a domain-restricted Publishable key, then either load the organization catalog or type the Avatar, Scene, and Voice IDs directly.
+
+The demo exercises the full documented Presenter surface:
+
+| Area | Module |
+|---|---|
+| Element types, emotions, events, catalog records | `app/lib/perxona/types.ts` |
+| Regional runtime loader, result codes, motion markup | `app/lib/perxona/presenter.ts` |
+| Paginated Avatar, Scene, Voice, and Motion reads | `app/lib/perxona/catalog.ts` |
+| Element ownership, event wiring, every 0.3.0 method | `app/lib/perxona/use-presenter.ts` |
+| Push-to-talk microphone via the Web Speech API | `app/lib/speech/use-speech-recognition.ts` |
+
+Motion markup is validated against the selected Avatar's motion catalog before
+it reaches `present()`, so an unknown Motion ID is stripped rather than sent.
 
 ```bash
 cd app
