@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import { AvatarPortrait } from './avatar-portrait';
+import { BreathingGuide } from './breathing-guide';
 import type { CompanionSession } from '@/lib/companion/use-companion-session';
 import { useSpeechRecognition } from '@/lib/speech/use-speech-recognition';
 
@@ -33,6 +34,7 @@ export function Session({
     thinking,
     performing,
     firedExercise,
+    breathing,
     scripted,
     cue,
     setListening,
@@ -145,7 +147,14 @@ export function Session({
    * once and come back once instead of blinking at each handover between
    * thinking, delivery and speech.
    */
-  const transcriptHidden = thinking || delivering || speaking;
+  const avatarHasTurn = thinking || delivering || speaking;
+  /*
+   * The count waits for the voice to finish. Starting it under the line that
+   * explains it would put the ring mid-cycle by the time she is actually asked
+   * to breathe in, so the avatar explains and then the guide takes over.
+   */
+  const breathingActive = breathing !== null && !avatarHasTurn;
+  const transcriptHidden = avatarHasTurn || breathing !== null;
 
   /* One word for what the avatar is doing, plus how it is doing it. */
   const stage = thinking
@@ -407,6 +416,17 @@ export function Session({
             ) : null}
           </div>
         </div>
+
+        {/*
+          Anchored low and outside the transcript's mask: the count has to stay
+          crisp where the bubbles are deliberately faded, and clear of the
+          avatar's face at either camera angle.
+        */}
+        {breathingActive ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-32 z-20 flex justify-center sm:bottom-36">
+            <BreathingGuide pattern={breathing} />
+          </div>
+        ) : null}
 
         {scripted && cueOpen ? (
           <div className="mx-auto w-full max-w-2xl px-5 sm:px-7">

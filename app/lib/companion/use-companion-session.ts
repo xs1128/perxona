@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { respond, type CompanionReply } from './brain';
+import type { BreathingPattern } from './breathing';
 import { findAvatarPreset, findScenePreset } from './defaults';
 import { buildOpeningLine } from './prompt';
 import {
@@ -67,6 +68,12 @@ export function useCompanionSession(prescription: Prescription) {
    * rather than being told that it did.
    */
   const [firedExercise, setFiredExercise] = useState<string | null>(null);
+  /**
+   * The paced breath currently on screen. It outlives the turn that started
+   * it — the patient is meant to keep breathing after the avatar stops
+   * talking — so only her next turn or the end of the session clears it.
+   */
+  const [breathing, setBreathing] = useState<BreathingPattern | null>(null);
   /** Rehearsal has no `PERFORMANCE_START`, so the browser voice reports itself. */
   const [rehearsalSpeaking, setRehearsalSpeaking] = useState(false);
   /**
@@ -222,6 +229,7 @@ export function useCompanionSession(prescription: Prescription) {
 
   const say = async (reply: CompanionReply) => {
     beginDelivery(reply.say);
+    setBreathing(reply.breathing ?? null);
     setLastSaid(reply.say);
     setFiredExercise(reply.firedExercise ?? null);
     setMessages((current) => [
@@ -323,6 +331,8 @@ export function useCompanionSession(prescription: Prescription) {
     if (!utterance) return;
 
     setThinking(true);
+    // Her answering is the signal that the breath is over.
+    setBreathing(null);
     if (live) actions.setThinking(true);
     try {
       const reply = await respond(prescription, utterance, history);
@@ -350,6 +360,7 @@ export function useCompanionSession(prescription: Prescription) {
     setLastSaid('');
     setPerforming(null);
     setFiredExercise(null);
+    setBreathing(null);
     if (deliverWatchdogRef.current) {
       clearTimeout(deliverWatchdogRef.current);
       deliverWatchdogRef.current = null;
@@ -371,6 +382,7 @@ export function useCompanionSession(prescription: Prescription) {
     lastSaid,
     performing,
     firedExercise,
+    breathing,
     thinking,
     /** True when the packaged demo plan is loaded and the script is armed. */
     scripted,

@@ -129,7 +129,9 @@ export function Console({
                 <ChoiceRow
                   options={AGE_BANDS}
                   value={patient.age_band}
-                  onChange={(age_band) => patch('patient_profile', { age_band })}
+                  onChange={(age_band) =>
+                    patch('patient_profile', { age_band })
+                  }
                 />
               </Field>
             </div>
