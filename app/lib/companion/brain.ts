@@ -89,7 +89,21 @@ async function askModel(
       body: JSON.stringify({ prescription, utterance, history }),
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      /*
+       * The scripted fallback below is seamless by design, which also hides
+       * config problems — a depleted-key 429 looks identical to a working
+       * model. Say why the fallback fired, so the browser console tells the
+       * truth the avatar cannot.
+       */
+      const { error } = (await response
+        .json()
+        .catch(() => ({}))) as { error?: string };
+      console.warn(
+        `Companion model call failed (${response.status}): ${error ?? 'unknown error'} — using scripted reply`,
+      );
+      return null;
+    }
 
     const { reply } = (await response.json()) as { reply?: CompanionReply };
     if (
