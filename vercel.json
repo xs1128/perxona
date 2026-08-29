@@ -4,5 +4,16 @@
   "installCommand": "npm --prefix app ci",
   "buildCommand": "npm --prefix app run build",
   "outputDirectory": "app/dist/client",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "microphone=(self), on-device-speech-recognition=(self)"
+        }
+      ]
+    }
+  ]
 }

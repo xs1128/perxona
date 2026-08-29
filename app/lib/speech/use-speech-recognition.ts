@@ -27,6 +27,7 @@ type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
   maxAlternatives: number;
+  processLocally?: boolean;
   start: () => void;
   stop: () => void;
   abort: () => void;
@@ -36,7 +37,23 @@ type SpeechRecognitionLike = {
   onstart: (() => void) | null;
 };
 
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+type SpeechRecognitionAvailability =
+  | 'available'
+  | 'downloadable'
+  | 'downloading'
+  | 'unavailable';
+
+type SpeechRecognitionConstructor = {
+  new (): SpeechRecognitionLike;
+  available?: (options: {
+    langs: string[];
+    processLocally: boolean;
+  }) => Promise<SpeechRecognitionAvailability>;
+  install?: (options: {
+    langs: string[];
+    processLocally: boolean;
+  }) => Promise<boolean>;
+};
 
 function getConstructor(): SpeechRecognitionConstructor | null {
   if (typeof window === 'undefined') return null;
@@ -58,6 +75,38 @@ function subscribeToNothing() {
  * broken, so they end the turn quietly instead.
  */
 const BENIGN_ERRORS = new Set(['no-speech', 'aborted']);
+const NETWORK_RETRY_LIMIT = 2;
+
+/**
+ * Chrome can recognize on-device when its language pack is installed. Prefer
+ * that path because hosted pages otherwise depend on the browser vendor's
+ * remote recognition service, which is what reports the `network` error.
+ */
+async function prepareOnDeviceRecognition(
+  Recognition: SpeechRecognitionConstructor,
+  lang: string,
+) {
+  if (!Recognition.available) return false;
+
+  try {
+    const availability = await Recognition.available({
+      langs: [lang],
+      processLocally: true,
+    });
+
+    if (availability === 'available') return true;
+    if (availability === 'unavailable' || !Recognition.install) return false;
+
+    return await Recognition.install({
+      langs: [lang],
+      processLocally: true,
+    });
+  } catch {
+    // Older implementations may expose part of the local API but reject the
+    // availability request. Their cloud recognizer remains a valid fallback.
+    return false;
+  }
+}
 
 function describeError(code: string) {
   switch (code) {
@@ -101,10 +150,12 @@ export function useSpeechRecognition({
    */
   const wantedRef = useRef(false);
   const restartsRef = useRef(0);
+  const networkRetriesRef = useRef(0);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processingModeRef = useRef<'unknown' | 'local' | 'remote'>('unknown');
 
   /** Lets a session's `onend` relaunch without `launch` referring to itself. */
-  const launchRef = useRef<() => boolean>(() => false);
+  const launchRef = useRef<() => Promise<boolean>>(async () => false);
 
   useEffect(() => {
     onResultRef.current = onResult;
@@ -123,28 +174,54 @@ export function useSpeechRecognition({
   );
 
   const [listening, setListening] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const launch = useCallback(() => {
+  const launch = useCallback(async () => {
     if (recognitionRef.current) return true;
 
     const Recognition = getConstructor();
     if (!Recognition) {
+      setPreparing(false);
       setError('This browser has no speech recognition support');
       return false;
     }
 
+    setPreparing(true);
+
+    if (processingModeRef.current === 'unknown') {
+      const local = await prepareOnDeviceRecognition(Recognition, lang);
+      processingModeRef.current = local ? 'local' : 'remote';
+    }
+
+    // The user may release Talk while a language pack is being prepared.
+    if (!wantedRef.current) {
+      setPreparing(false);
+      return true;
+    }
+
     const recognition = new Recognition();
     recognition.lang = lang;
-    recognition.continuous = true;
+    // Push-to-talk is made of short sessions. Ending after an utterance avoids
+    // keeping a fragile remote recognition stream open unnecessarily; onend
+    // starts another short session if the user is still holding the control.
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
+    if (processingModeRef.current === 'local') {
+      recognition.processLocally = true;
+    }
 
     recognition.onstart = () => {
-      restartsRef.current = 0;
+      if (!wantedRef.current) {
+        recognition.stop();
+        return;
+      }
+      setPreparing(false);
       setListening(true);
+      setError(null);
     };
 
     recognition.onresult = (event) => {
@@ -166,6 +243,9 @@ export function useSpeechRecognition({
       setInterim(pending);
 
       if (finalText.trim()) {
+        restartsRef.current = 0;
+        networkRetriesRef.current = 0;
+        setError(null);
         setInterim('');
         setTranscript(finalText.trim());
         onResultRef.current?.(finalText.trim());
@@ -175,13 +255,25 @@ export function useSpeechRecognition({
     recognition.onerror = (event) => {
       if (BENIGN_ERRORS.has(event.error)) return;
 
-      // A real failure is not worth retrying into a loop.
+      if (
+        event.error === 'network' &&
+        wantedRef.current &&
+        processingModeRef.current === 'remote' &&
+        networkRetriesRef.current < NETWORK_RETRY_LIMIT
+      ) {
+        networkRetriesRef.current += 1;
+        setError('Speech service interrupted — reconnecting…');
+        return;
+      }
+
+      // Permission, device, and persistent service failures need user action.
       wantedRef.current = false;
       setError(describeError(event.error));
     };
 
     recognition.onend = () => {
       recognitionRef.current = null;
+      setPreparing(false);
       setInterim('');
 
       if (!wantedRef.current) {
@@ -201,9 +293,14 @@ export function useSpeechRecognition({
         return;
       }
 
-      restartTimerRef.current = setTimeout(() => {
-        if (wantedRef.current) launchRef.current();
-      }, 250);
+      restartTimerRef.current = setTimeout(
+        () => {
+          if (wantedRef.current) void launchRef.current();
+        },
+        networkRetriesRef.current > 0
+          ? 400 * 2 ** (networkRetriesRef.current - 1)
+          : 250,
+      );
     };
 
     recognitionRef.current = recognition;
@@ -215,6 +312,7 @@ export function useSpeechRecognition({
       // `start()` throws if a session is somehow still running; abandon it.
       recognitionRef.current = null;
       wantedRef.current = false;
+      setPreparing(false);
       setListening(false);
       setError('Could not start the microphone');
       return false;
@@ -229,15 +327,26 @@ export function useSpeechRecognition({
     if (wantedRef.current) return;
     wantedRef.current = true;
     restartsRef.current = 0;
+    networkRetriesRef.current = 0;
     setError(null);
-    setListening(true);
-    if (!launch()) wantedRef.current = false;
+    setPreparing(true);
+    void launch()
+      .then((started) => {
+        if (!started) wantedRef.current = false;
+      })
+      .catch(() => {
+        wantedRef.current = false;
+        setPreparing(false);
+        setListening(false);
+        setError('Could not start the microphone');
+      });
   }, [launch]);
 
   const stop = useCallback(() => {
     wantedRef.current = false;
     if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     restartTimerRef.current = null;
+    setPreparing(false);
     setListening(false);
     setInterim('');
     recognitionRef.current?.stop();
@@ -257,5 +366,15 @@ export function useSpeechRecognition({
     setInterim('');
   }, []);
 
-  return { supported, listening, transcript, interim, error, start, stop, reset };
+  return {
+    supported,
+    preparing,
+    listening,
+    transcript,
+    interim,
+    error,
+    start,
+    stop,
+    reset,
+  };
 }
