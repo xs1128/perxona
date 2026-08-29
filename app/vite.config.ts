@@ -12,6 +12,11 @@ const { d1, r2 } = hostingConfig;
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
 
+// Vercel sets VERCEL=1 in the build environment. There we build a static
+// export (see next.config.ts) and skip the Cloudflare workerd pipeline and
+// the OpenAI Sites metadata plugin, which only apply to those platforms.
+const isVercelBuild = !!process.env.VERCEL;
+
 const localBindingConfig = {
   main: 'vinext/server/fetch-handler',
   compatibility_flags: ['nodejs_compat'],
@@ -51,11 +56,15 @@ export default defineConfig(async () => {
       : undefined,
     plugins: [
       vinext(),
-      sites(),
-      cloudflare({
-        viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: localBindingConfig,
-      }),
+      ...(isVercelBuild
+        ? []
+        : [
+            sites(),
+            cloudflare({
+              viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
+              config: localBindingConfig,
+            }),
+          ]),
     ],
   };
 });
