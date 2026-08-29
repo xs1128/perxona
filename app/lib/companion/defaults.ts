@@ -178,46 +178,6 @@ export const MIA_PRESCRIPTION: Prescription = {
   },
 };
 
-/** A blank plan, for a clinician starting from nothing. */
-export const EMPTY_PRESCRIPTION: Prescription = {
-  patient_profile: {
-    patient_id: '',
-    name: '',
-    preferred_name: '',
-    gender: 'unspecified',
-    age_band: 'teen',
-    primary_presentation: [],
-  },
-  clinical_guardrails: {
-    therapeutic_goal: '',
-    hard_boundaries: [],
-    clinical_directive: 'NON_DIRECTIVE_SUPPORT',
-    forbidden_actions: [],
-    safe_anchors: [],
-  },
-  prescribed_interventions: {
-    approved_modalities: [],
-    custom_exercises: [],
-  },
-  avatar_persona: {
-    companions: [],
-    sceneId: 'bedroom',
-    tone: ['warm', 'gentle'],
-    relationship_dynamic: 'supportive_companion',
-    style_constraints: '',
-  },
-  escalation_protocol: {
-    dashboard_alert_keywords: [],
-    emergency_threshold: '',
-    emergency_action: {
-      break_character: true,
-      provide_resource: 'Crisis Text Line (Text HOME to 741741)',
-      notify_guardian: false,
-      guardian_contact: '',
-    },
-  },
-};
-
 export function findAvatarPreset(id: string) {
   return AVATAR_PRESETS.find((preset) => preset.id === id);
 }
