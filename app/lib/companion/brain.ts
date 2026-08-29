@@ -21,6 +21,8 @@ export type CompanionReply = {
   emotion: PresentationEmotion;
   intensity: PresentationIntensity;
   flag: 'none' | 'distress' | 'emergency';
+  /** The phrase that raised the flag, so the alert can quote what was heard. */
+  flagReason?: string;
   /** Set when a prescribed exercise fired, so the console can show which. */
   firedExercise?: string;
 };
@@ -50,6 +52,7 @@ export async function respond(
       emotion: 'caring',
       intensity: 'high',
       flag: 'emergency',
+      flagReason: signal.matched[0],
     };
   }
 
@@ -65,6 +68,7 @@ export async function respond(
       emotion: 'caring',
       intensity: 'low',
       flag: reply.flag,
+      flagReason: reply.flagReason,
     };
   }
 
@@ -99,6 +103,7 @@ function scriptedReply(
     emotion: beat.emotion,
     intensity: beat.intensity,
     flag: beat.flag,
+    flagReason: beat.flag === 'none' ? undefined : beat.cue,
     firedExercise: beat.firedExercise,
   };
 }

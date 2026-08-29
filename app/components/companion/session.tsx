@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, PhoneOff, ShieldAlert, TvMinimalPlay } from 'lucide-react';
+import {
+  Mic,
+  PhoneCall,
+  PhoneOff,
+  ShieldAlert,
+  TvMinimalPlay,
+} from 'lucide-react';
 
 import { AvatarPortrait } from './avatar-portrait';
 import type { CompanionSession } from '@/lib/companion/use-companion-session';
@@ -23,6 +29,7 @@ export function Session({
     preset,
     companion,
     speaking,
+    delivering,
     thinking,
     performing,
     firedExercise,
@@ -130,6 +137,15 @@ export function Session({
     if (holdTimer.current) clearTimeout(holdTimer.current);
     holdTimer.current = null;
   };
+
+  /*
+   * The transcript steps aside for the avatar's turn.
+   *
+   * It covers the whole turn, not just the audible part, so the bubbles fade
+   * once and come back once instead of blinking at each handover between
+   * thinking, delivery and speech.
+   */
+  const transcriptHidden = thinking || delivering || speaking;
 
   /* One word for what the avatar is doing, plus how it is doing it. */
   const stage = thinking
@@ -273,37 +289,62 @@ export function Session({
           </div>
         </header>
 
+        {/*
+          Two very different jobs share this slot. Distress is a note for the
+          dashboard and stays quiet. An emergency is an instruction to the
+          person in the room — call the doctor — so it goes solid red, names
+          the contact from the plan, and quotes the line that tripped it.
+        */}
         {alertState ? (
-          <div
-            className={`mx-5 flex items-start gap-3 rounded-2xl border px-4 py-3 sm:mx-7 ${
-              alertState.level === 'emergency'
-                ? 'border-[#f2836b]/50 bg-[#f2836b]/16'
-                : 'border-[#f5c563]/40 bg-[#f5c563]/12'
-            }`}
-          >
-            <ShieldAlert
-              className={`mt-0.5 size-4 shrink-0 ${
-                alertState.level === 'emergency'
-                  ? 'text-[#ffb9a6]'
-                  : 'text-[#f5c563]'
-              }`}
-            />
-            <div className="flex-1">
-              <p className="text-[13px] font-semibold text-white">
-                {alertState.level === 'emergency'
-                  ? 'Emergency threshold crossed'
-                  : 'Distress flagged'}
-              </p>
-              <p className="text-[12px] text-white/65">{alertState.detail}</p>
+          alertState.level === 'emergency' ? (
+            <div className="mx-5 rounded-2xl border-2 border-[#ff4d4d] bg-[#c81e1e] px-4 py-3 shadow-[0_0_0_4px_rgba(255,77,77,0.18)] sm:mx-7">
+              <div className="flex items-start gap-3">
+                <PhoneCall className="mt-0.5 size-5 shrink-0 animate-pulse text-white" />
+                <div className="flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                    Emergency threshold crossed
+                  </p>
+                  <p className="text-[16px] font-semibold leading-tight text-white">
+                    Call the doctor now
+                    {alertState.contact ? ` — ${alertState.contact}` : ''}
+                  </p>
+                  {alertState.reason ? (
+                    <p className="mt-1 text-[12px] leading-snug text-white/80">
+                      Heard: &ldquo;{alertState.reason}&rdquo;
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-[12px] leading-snug text-white/80">
+                    {alertState.detail}
+                    {alertState.resource ? ` · ${alertState.resource}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={dismissAlert}
+                  className="text-[12px] text-white/60 transition hover:text-white"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={dismissAlert}
-              className="text-[12px] text-white/50 transition hover:text-white"
-            >
-              Dismiss
-            </button>
-          </div>
+          ) : (
+            <div className="mx-5 flex items-start gap-3 rounded-2xl border border-[#f5c563]/40 bg-[#f5c563]/12 px-4 py-3 sm:mx-7">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-[#f5c563]" />
+              <div className="flex-1">
+                <p className="text-[13px] font-semibold text-white">
+                  Distress flagged
+                </p>
+                <p className="text-[12px] text-white/65">{alertState.detail}</p>
+              </div>
+              <button
+                type="button"
+                onClick={dismissAlert}
+                className="text-[12px] text-white/50 transition hover:text-white"
+              >
+                Dismiss
+              </button>
+            </div>
+          )
         ) : null}
 
         {/*
@@ -320,7 +361,11 @@ export function Session({
               'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.12) 14%, rgba(0,0,0,0.4) 34%, rgba(0,0,0,0.72) 56%, #000 78%)',
           }}
         >
-          <div className="space-y-4 max-w-2xl mx-auto w-full">
+          <div
+            className={`space-y-4 max-w-2xl mx-auto w-full transition-opacity duration-500 ${
+              transcriptHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
+            }`}
+          >
             {session.messages.map((msg) => (
               <div
                 key={msg.id}

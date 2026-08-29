@@ -300,7 +300,7 @@ export function Console({
               <ArrowRight className="size-4" />
             </button>
 
-            <p className="mt-3 text-center font-mono text-[11.5px] text-[var(--sol-ink-faint)]">
+            <p className="mt-3 text-center font-mono text-[11.5px] text-[var(--sol-ink-soft)]">
               {ready
                 ? 'The avatar speaks only inside these boundaries.'
                 : `Still needed — ${missing.join(', ')}.`}

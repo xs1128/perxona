@@ -350,9 +350,75 @@ body {
   pointer-events: none;
 }
 
+/*
+ * The plate fills the room left under the type, and the artwork is scaled so
+ * that it exactly fills that room: the cut-outs occupy the bottom 53.8% of the
+ * file (measured — the first inked row is at y=311 of 675), so scaling the
+ * image to 180% of the band's height puts the artwork's own top edge just
+ * inside it and clips the white field away above.
+ *
+ * Scaling it this way rather than cropping to fit is what keeps the artwork
+ * whole: `cover` cut a hard line through the brains, and the long mask needed
+ * to hide that cut greyed the artwork it was protecting. It also means the
+ * plate can never climb into the type, which is what happened on a short
+ * laptop screen when the plate was laid out at its own aspect.
+ */
+.solace-collage--plate {
+  width: 100%;
+  height: 100%;
+  background-size: auto 180%;
+  mask-image: none;
+}
+
+/*
+ * The landing page's two states, and the one thing that decides between them
+ * is the viewport's aspect, not its width: how tall the plate comes out at
+ * full width, relative to the room left under the type.
+ *
+ * Portrait — the plate is short, so it keeps its natural height and the type
+ * is centred in the space above it. Landscape — the plate is taller than the
+ * room left for it, so it takes the remainder and overflows upward behind the
+ * type, which is set from the top. Getting this backwards is what squeezed the
+ * title against the masthead rule: a fixed frieze on a laptop screen left the
+ * type less room than its own padding asked for.
+ */
+.solace-hero {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.solace-hero-type {
+  justify-content: center;
+}
+
+@media (min-aspect-ratio: 1/1) {
+  .solace-hero {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .solace-hero-type {
+    justify-content: flex-start;
+  }
+}
+
+/*
+ * Portrait is also too narrow for the plate at full width — on a phone the
+ * artwork would be a 120px strip. It is enlarged by half and the outer
+ * cut-outs run off the page, which also clips away most of the artwork's white
+ * field so the frieze starts near its own top edge instead of after a band of
+ * paper.
+ */
+@media (max-aspect-ratio: 1/1) {
+  .solace-collage--plate {
+    height: auto;
+    aspect-ratio: 2 / 1;
+    background-size: 150% auto;
+  }
+}
+
 /* Behind a form the same frieze has to stay a watermark. */
 .solace-collage--quiet {
-  opacity: 0.22;
+  opacity: 0.18;
   mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
 }
 
