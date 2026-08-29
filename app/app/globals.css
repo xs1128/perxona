@@ -224,22 +224,44 @@ body {
   }
 }
 
+
 /* -------------------------------------------------------------------------- */
-/* Solace — clinician console and companion stage                              */
+/* Solace                                                                      */
+/*                                                                             */
+/* Two grounds, not one. The landing page and the console are set on paper —   */
+/* an editorial ground built around the collage, which is printed into it with */
+/* `multiply` so the artwork's white field disappears instead of sitting on    */
+/* top as a bright rectangle. The session stage stays dark, because it is a    */
+/* projection surface rather than a page.                                      */
 /* -------------------------------------------------------------------------- */
 
 :root {
+  /* Dark stage (session). */
   --solace-ink: #0a2730;
   --solace-deep: #0d3542;
   --solace-mid: #16576a;
   --solace-teal: #2b7f96;
   --solace-cyan: #5cc9de;
   --solace-blue: #3b82f6;
-  --solace-paper: #eef2f4;
   --solace-coral: #f2836b;
   --solace-violet: #7c7ff0;
   --solace-mint: #5fcdc0;
   --solace-butter: #f5c563;
+
+  /* Paper (landing + console). Colours sampled off the collage: the scrub
+     cobalt, the arterial red, the enamel-mug patina. */
+  --sol-paper: #f2efe8;
+  --sol-paper-deep: #e8e2d6;
+  --sol-card: #fffdf8;
+  --sol-ink: #16181c;
+  --sol-ink-soft: #55595f;
+  --sol-ink-faint: #8b8f95;
+  --sol-rule: rgba(22, 24, 28, 0.13);
+  --sol-rule-strong: rgba(22, 24, 28, 0.3);
+  --sol-surgical: #27458a;
+  --sol-artery: #b3352b;
+  --sol-patina: #3e8b86;
+  --sol-ochre: #96690f;
 }
 
 /*
@@ -264,13 +286,20 @@ body {
   overscroll-behavior: contain;
 }
 
+/* A screen that owns its own inner scroller (the console) instead of scrolling
+   as a whole, so a pinned header and a pinned backdrop can stay put. */
+.solace-frame {
+  height: 100dvh;
+  overflow: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .solace-rail-track {
     transition-duration: 1ms;
   }
 }
 
-/* Deep clinical ground, shared by every screen so the rail reads continuous. */
+/* Deep clinical ground, used by the session stage. */
 .solace-ground {
   background:
     radial-gradient(
@@ -297,54 +326,77 @@ body {
     );
 }
 
-.solace-glass {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 24px 70px -30px rgba(0, 0, 0, 0.75);
+/* Paper ground. `isolation` keeps the collage's blend mode from reaching past
+   this screen into its neighbours on the rail. */
+.solace-paper {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--sol-paper);
+  color: var(--sol-ink);
 }
 
-.solace-glass-soft {
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.045);
+/*
+ * The collage frieze. `multiply` drops the artwork's white field onto the
+ * paper colour, so there is no seam and no rectangle — only the cut-outs
+ * survive. The mask carries the top edge back into the page.
+ */
+.solace-collage {
+  background-image: url('/collage.jpg');
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: cover;
+  mix-blend-mode: multiply;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 26%);
+  pointer-events: none;
 }
 
-/* Selectable tile: avatar cards, scene cards, age bands. */
+/* Behind a form the same frieze has to stay a watermark. */
+.solace-collage--quiet {
+  opacity: 0.22;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
+}
+
+/* Paper card: a sheet on a desk, not a pane of glass. */
+.solace-card {
+  border: 1px solid var(--sol-rule);
+  border-radius: 4px;
+  background: var(--sol-card);
+  box-shadow:
+    0 1px 1px rgba(22, 24, 28, 0.04),
+    0 18px 40px -32px rgba(22, 24, 28, 0.5);
+}
+
+/* Selectable tile: scene cards. */
 .solace-tile {
   position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sol-rule);
+  border-radius: 4px;
+  background: #fff;
   text-align: left;
   transition:
     border-color 180ms ease,
-    background 180ms ease,
-    transform 180ms ease;
+    box-shadow 180ms ease;
 }
 
 .solace-tile:hover {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--sol-rule-strong);
 }
 
 .solace-tile[data-selected='true'] {
-  border-color: rgba(92, 201, 222, 0.75);
-  background: rgba(92, 201, 222, 0.14);
-  box-shadow: 0 0 0 1px rgba(92, 201, 222, 0.4);
+  border-color: var(--sol-surgical);
+  box-shadow: inset 0 0 0 1px var(--sol-surgical);
 }
 
-/* Pill used for tones, anchors, boundaries, keywords. */
+/* Tag used for genders, age bands, boundaries. Squared, like a filing label. */
 .solace-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.78);
+  padding: 5px 10px;
+  border: 1px solid var(--sol-rule);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--sol-ink-soft);
   font-size: 12.5px;
   line-height: 1.4;
   transition:
@@ -354,65 +406,110 @@ body {
 }
 
 .solace-chip:hover {
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
+  border-color: var(--sol-rule-strong);
+  color: var(--sol-ink);
 }
 
 .solace-chip[data-selected='true'] {
-  border-color: rgba(92, 201, 222, 0.6);
-  background: rgba(92, 201, 222, 0.18);
-  color: #dff6fb;
+  border-color: var(--sol-surgical);
+  background: var(--sol-surgical);
+  color: #fff;
 }
 
 .solace-chip[data-variant='boundary'] {
-  border-color: rgba(242, 131, 107, 0.45);
-  background: rgba(242, 131, 107, 0.16);
-  color: #ffd9cf;
+  border-color: rgba(179, 53, 43, 0.34);
+  background: rgba(179, 53, 43, 0.07);
+  color: var(--sol-artery);
 }
 
 .solace-chip[data-variant='anchor'] {
-  border-color: rgba(95, 205, 192, 0.42);
-  background: rgba(95, 205, 192, 0.15);
-  color: #cdf5ef;
+  border-color: rgba(62, 139, 134, 0.34);
+  background: rgba(62, 139, 134, 0.08);
+  color: #2c6d69;
 }
 
 .solace-chip[data-variant='alert'] {
-  border-color: rgba(245, 197, 99, 0.45);
-  background: rgba(245, 197, 99, 0.15);
-  color: #fbeccb;
+  border-color: rgba(150, 105, 15, 0.34);
+  background: rgba(150, 105, 15, 0.08);
+  color: var(--sol-ochre);
 }
 
 .solace-field {
   width: 100%;
-  padding: 10px 13px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 12px;
-  background: rgba(4, 22, 28, 0.45);
-  color: #eaf6f9;
+  padding: 11px 13px;
+  border: 1px solid var(--sol-rule);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--sol-ink);
   font-size: 14px;
   transition:
     border-color 160ms ease,
-    background 160ms ease;
+    box-shadow 160ms ease;
 }
 
 .solace-field::placeholder {
-  color: rgba(226, 244, 249, 0.34);
+  color: var(--sol-ink-faint);
 }
 
 .solace-field:focus {
-  border-color: rgba(92, 201, 222, 0.6);
-  background: rgba(4, 22, 28, 0.68);
+  border-color: var(--sol-surgical);
   outline: none;
+  box-shadow: 0 0 0 3px rgba(39, 69, 138, 0.14);
+}
+
+/* Every small label on paper is set in the mono face, like a form printed in
+   a clinic: it separates the instruction from the answer without a second
+   colour or a heavier weight. */
+.solace-meta,
+.solace-label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--sol-ink-faint);
 }
 
 .solace-label {
   display: block;
   margin-bottom: 7px;
-  color: rgba(226, 244, 249, 0.62);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+}
+
+/* One action, one shape. Squared, ink-filled, no gradient. */
+.solace-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-radius: 3px;
+  background: var(--sol-ink);
+  color: var(--sol-paper);
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition:
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.solace-cta svg {
+  transition: transform 180ms ease;
+}
+
+.solace-cta:enabled:hover,
+.solace-cta:not(:disabled):hover {
+  background: var(--sol-surgical);
+}
+
+.solace-cta:not(:disabled):hover svg {
+  transform: translateX(4px);
+}
+
+.solace-cta:disabled {
+  background: rgba(22, 24, 28, 0.14);
+  color: rgba(22, 24, 28, 0.42);
+  cursor: not-allowed;
 }
 
 /* Hero and stage entrance. */
@@ -479,19 +576,20 @@ body {
   background-clip: content-box;
 }
 
-/* Headings across the console and the landing page use the geometric face. */
+.solace-paper .solace-scrollbar::-webkit-scrollbar-thumb,
+.solace-scrollbar.solace-paper::-webkit-scrollbar-thumb {
+  background: rgba(22, 24, 28, 0.2);
+  background-clip: content-box;
+}
+
+/* The stage keeps the geometric grotesque; paper takes the didone, which is
+   what the New Yorker cover in the collage is set in. */
 h1,
-h2,
-.solace-display {
+h2 {
   font-family: var(--font-outfit), var(--font-geist-sans), sans-serif;
 }
 
-/* A brighter glass, for cards that must read as foreground on the hero. */
-.solace-glass-bright {
-  background: rgba(255, 255, 255, 0.13);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.solace-glass-bright:hover {
-  background: rgba(255, 255, 255, 0.17);
+.solace-display {
+  font-family: var(--font-instrument-serif), Georgia, 'Times New Roman', serif;
+  font-weight: 400;
 }

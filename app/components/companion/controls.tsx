@@ -23,7 +23,7 @@ export function Field({
       <span className="solace-label">{label}</span>
       {children}
       {hint ? (
-        <p className="mt-1.5 text-[11.5px] leading-snug text-white/38">
+        <p className="mt-1.5 text-[11.5px] leading-snug text-[var(--sol-ink-faint)]">
           {hint}
         </p>
       ) : null}
@@ -132,7 +132,7 @@ export function ChipListInput({
           type="button"
           onClick={() => add(draft)}
           aria-label="Add"
-          className="grid size-[42px] shrink-0 place-items-center rounded-xl border border-white/14 bg-white/6 text-white/70 transition hover:border-white/30 hover:text-white"
+          className="grid size-[42px] shrink-0 place-items-center rounded-[3px] border border-[var(--sol-rule)] bg-white text-[var(--sol-ink-soft)] transition hover:border-[var(--sol-rule-strong)] hover:text-[var(--sol-ink)]"
         >
           <Plus className="size-4" />
         </button>
@@ -145,7 +145,7 @@ export function ChipListInput({
               key={entry}
               type="button"
               onClick={() => add(entry)}
-              className="rounded-full border border-dashed border-white/16 px-2.5 py-1 text-[11.5px] text-white/45 transition hover:border-white/35 hover:text-white/80"
+              className="rounded-[3px] border border-dashed border-[var(--sol-rule-strong)] px-2.5 py-1 text-[11.5px] text-[var(--sol-ink-faint)] transition hover:border-[var(--sol-surgical)] hover:text-[var(--sol-surgical)]"
             >
               + {entry}
             </button>
@@ -173,19 +173,17 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={cn('solace-glass p-6 sm:p-7', className)}>
-      <header className="mb-6 flex items-start gap-3.5">
+    <section className={cn('solace-card p-6 sm:p-7', className)}>
+      <header className="mb-6 flex items-start gap-3.5 border-b border-[var(--sol-rule)] pb-4">
         <span
-          className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl text-[13px] font-semibold text-[#07222b]"
-          style={{ background: accent }}
+          className="mt-[3px] grid size-[26px] shrink-0 place-items-center rounded-[3px] border font-mono text-[12px]"
+          style={{ borderColor: accent, color: accent }}
         >
           {step}
         </span>
         <div>
-          <h2 className="text-[19px] leading-tight font-semibold tracking-[-0.01em] text-white">
-            {title}
-          </h2>
-          <p className="mt-1 text-[13px] leading-snug text-white/50">
+          <h2 className="solace-display text-[23px] leading-none">{title}</h2>
+          <p className="mt-1.5 text-[13px] leading-snug text-[var(--sol-ink-soft)]">
             {caption}
           </p>
         </div>
