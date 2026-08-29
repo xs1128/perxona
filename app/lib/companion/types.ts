@@ -142,31 +142,3 @@ export const CLINICAL_DIRECTIVES: Array<{
     hint: 'Lower arousal, lengthen pauses, head toward rest.',
   },
 ];
-
-export const TONE_OPTIONS = [
-  'warm',
-  'peer-like',
-  'gentle',
-  'observant',
-  'playful',
-  'steady',
-];
-
-export const MODALITY_OPTIONS = [
-  'mindfulness_breathing',
-  'distraction_techniques',
-  'grounding_5_4_3_2_1',
-  'guided_imagery',
-  'reminiscence',
-  'creative_expression',
-];
-
-export const PRESENTATION_OPTIONS = [
-  'acute_bereavement',
-  'insomnia',
-  'nighttime_anxiety',
-  'pre_operative_anxiety',
-  'prolonged_hospitalization',
-  'social_isolation',
-  'separation_distress',
-];

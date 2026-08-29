@@ -59,43 +59,6 @@ export function ChoiceRow<T extends string>({
   );
 }
 
-/** Multi-choice row backed by a string array. */
-export function MultiChoiceRow({
-  options,
-  values,
-  onChange,
-  format = (value: string) => value.replace(/_/g, ' '),
-}: {
-  options: string[];
-  values: string[];
-  onChange: (next: string[]) => void;
-  format?: (value: string) => string;
-}) {
-  const toggle = (option: string) => {
-    onChange(
-      values.includes(option)
-        ? values.filter((entry) => entry !== option)
-        : [...values, option],
-    );
-  };
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((option) => (
-        <button
-          key={option}
-          type="button"
-          data-selected={values.includes(option)}
-          onClick={() => toggle(option)}
-          className="solace-chip capitalize"
-        >
-          {format(option)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /**
  * A free-form list rendered as removable chips with an inline add field.
  * Used for boundaries, anchors, forbidden actions, and alert keywords.
@@ -229,51 +192,5 @@ export function SectionCard({
       </header>
       {children}
     </section>
-  );
-}
-
-export function Toggle({
-  checked,
-  onChange,
-  label,
-  hint,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-  hint?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/4 px-3.5 py-3 text-left transition hover:border-white/22"
-    >
-      <span>
-        <span className="block text-[13.5px] font-medium text-white/85">
-          {label}
-        </span>
-        {hint ? (
-          <span className="mt-0.5 block text-[11.5px] text-white/42">
-            {hint}
-          </span>
-        ) : null}
-      </span>
-      <span
-        className={cn(
-          'relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors',
-          checked ? 'bg-[#5cc9de]' : 'bg-white/16',
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-[3px] size-4 rounded-full bg-white transition-all',
-            checked ? 'left-[19px]' : 'left-[3px]',
-          )}
-        />
-      </span>
-    </button>
   );
 }
