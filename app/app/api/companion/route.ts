@@ -115,7 +115,25 @@ export async function POST(request: Request) {
   }
 
   if (!response.ok) {
-    return jsonError(`Gemini responded with ${response.status}`, 502);
+    /*
+     * Pass Gemini's own reason through — "400 API key not valid",
+     * "404 model not found", "429 quota exceeded" — because the fix is
+     * different for each, and "Gemini responded with 400" hides it.
+     */
+    let reason = '';
+    try {
+      const failure = (await response.json()) as {
+        error?: { message?: string; status?: string };
+      };
+      reason = failure.error?.message ?? '';
+    } catch {
+      // A non-JSON error body stays empty; the status alone still helps.
+    }
+    console.error(`Gemini ${response.status}: ${reason}`);
+    return jsonError(
+      `Gemini responded with ${response.status}${reason ? ` — ${reason}` : ''}`,
+      502,
+    );
   }
 
   const payload = (await response.json()) as {
