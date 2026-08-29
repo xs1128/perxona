@@ -1,17 +1,9 @@
 'use client';
 
-import { ArrowRight, ChevronLeft, Plus } from 'lucide-react';
+import { ArrowRight, ChevronLeft } from 'lucide-react';
 
-import { AvatarPortrait, ScenePreview } from './avatar-portrait';
 import { ChipListInput, ChoiceRow, Field, SectionCard } from './controls';
-import {
-  AVATAR_PRESETS,
-  SCENE_PRESETS,
-  findAvatarPreset,
-} from '@/lib/companion/defaults';
 import { AGE_BANDS, GENDERS, type Prescription } from '@/lib/companion/types';
-
-const MAX_COMPANIONS = 2;
 
 const BOUNDARY_SUGGESTIONS = [
   'Car accidents',
@@ -19,9 +11,31 @@ const BOUNDARY_SUGGESTIONS = [
   'Hospital environments',
 ];
 
+/** Built-in avatars, shown by name — the child's caregiver never sees a raw ID. */
+const AVATAR_PRESETS = [
+  { id: '01KVQ57MAC3HT5GWZH5C2J7NZ9', name: 'cc076_female_twtoy_01' },
+  { id: '01KMFR2EGZN6JAWY70K4H77C3S', name: 'cc076a04_female_ntpc_01' },
+  {
+    id: '01KVQ59VW18PC6P2HQET51NMYS',
+    name: 'cc092a01_female_xrspace_mushroom_02',
+  },
+];
+
+/** Fixed set of three scenes, shown as a plain text choice — no visuals. */
+const SCENE_PRESETS = [
+  { id: '01KWVBXE9Q9CZ9FENATQHZYXJV', name: 'High-Tech Lab' },
+  { id: '01KWVBVQBZ5FV2BYKDTQ40V9AF', name: 'Sunset Valley' },
+  { id: '01KQEJD0NJFVM20M588K7D1E9Z', name: 'Food Advisor Studio' },
+];
+
 /**
  * One column, one control per row, three sections. Everything the care plan
  * needs beyond these fields keeps its prescribed default.
+ *
+ * The screen owns its own scroller so the masthead and the collage can stay
+ * pinned while the form moves between them. There is exactly one primary
+ * action, at the foot of the form where the reading ends — a second copy in
+ * the header only made the same button twice.
  */
 export function Console({
   prescription,
@@ -45,301 +59,213 @@ export function Console({
     onChange({ ...prescription, [key]: { ...prescription[key], ...value } });
   };
 
-  const toggleCompanion = (presetId: string) => {
-    const preset = findAvatarPreset(presetId);
-    if (!preset) return;
+  const currentCompanion = persona.companions[0] ?? {
+    presetId: 'custom',
+    calledName: 'Companion',
+    avatarId: '',
+    voiceId: '',
+  };
 
-    if (persona.companions.some((slot) => slot.presetId === presetId)) {
-      patch('avatar_persona', {
-        companions: persona.companions.filter(
-          (slot) => slot.presetId !== presetId,
-        ),
-      });
-      return;
-    }
-
-    // A third selection replaces the oldest rather than refusing the click.
+  const patchCompanion = (patch_: Partial<typeof currentCompanion>) => {
     patch('avatar_persona', {
-      companions: [
-        ...persona.companions.slice(-(MAX_COMPANIONS - 1)),
-        {
-          presetId,
-          calledName: preset.suggestedNames[0] ?? preset.name,
-          avatarId: preset.avatarId,
-          voiceId: preset.voiceId,
-        },
-      ],
+      companions: [{ ...currentCompanion, ...patch_ }],
     });
   };
 
-  const renameCompanion = (presetId: string, calledName: string) => {
-    patch('avatar_persona', {
-      companions: persona.companions.map((slot) =>
-        slot.presetId === presetId ? { ...slot, calledName } : slot,
-      ),
-    });
-  };
+  // A disabled button that will not say why is a dead end, so the same three
+  // conditions that gate the session also name themselves underneath it.
+  const missing = [
+    patient.name.trim().length > 0 ? null : 'the child’s name',
+    persona.companions.length > 0 ? null : 'a companion',
+    guardrails.therapeutic_goal.trim().length > 0 ? null : 'the context',
+  ].filter((entry): entry is string => entry !== null);
 
-  const ready =
-    patient.name.trim().length > 0 &&
-    persona.companions.length > 0 &&
-    guardrails.therapeutic_goal.trim().length > 0;
+  const ready = missing.length === 0;
 
   return (
-    <div className="solace-panel solace-scrollbar solace-ground">
-      <header className="sticky top-0 z-20 border-b border-white/8 bg-[#07222b]/75 backdrop-blur-xl">
+    <div className="solace-frame solace-paper flex flex-col">
+      <div className="solace-collage solace-collage--quiet absolute inset-x-0 bottom-0 h-[42svh]" />
+
+      <header className="relative z-20 border-b border-[var(--sol-rule)] bg-[var(--sol-paper)]/88 backdrop-blur-sm">
         <div className="mx-auto flex max-w-[720px] items-center gap-4 px-5 py-4">
           <button
             type="button"
             onClick={onBack}
             aria-label="Back"
-            className="grid size-9 shrink-0 place-items-center rounded-full border border-white/12 text-white/65 transition hover:border-white/30 hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-[3px] border border-[var(--sol-rule)] bg-white text-[var(--sol-ink-soft)] transition hover:border-[var(--sol-rule-strong)] hover:text-[var(--sol-ink)]"
           >
             <ChevronLeft className="size-4" />
           </button>
 
-          <h1 className="flex-1 text-[17px] font-semibold tracking-[-0.01em] text-white">
+          <h1 className="solace-display flex-1 text-[22px] leading-none">
             Set Your Companion
           </h1>
 
-          <button
-            type="button"
-            onClick={onBegin}
-            disabled={!ready}
-            className="group inline-flex items-center gap-2.5 rounded-full bg-white py-1.5 pr-1.5 pl-5 text-[14px] font-medium text-[#0a2730] transition enabled:hover:gap-3.5 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Begin Session
-            <span className="grid size-8 place-items-center rounded-full bg-[#2f6fe4] text-white">
-              <ArrowRight className="size-4" />
-            </span>
-          </button>
+          <span className="solace-meta hidden sm:block">The prescription</span>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[720px] space-y-4 px-5 py-6">
-        {/* ---------------------------------------------------------------- */}
-        <SectionCard
-          step="1"
-          title="The Child"
-          caption="Who the companion is speaking to."
-          accent="#f2836b"
-        >
-          <div className="space-y-6">
-            <Field label="Full name">
-              <input
-                value={patient.name}
-                onChange={(event) =>
-                  patch('patient_profile', { name: event.target.value })
-                }
-                placeholder="Mia Hartono"
-                className="solace-field"
-              />
-            </Field>
+      <div className="solace-scrollbar relative z-10 flex-1 overflow-y-auto overscroll-contain">
+        <div className="mx-auto max-w-[720px] space-y-4 px-5 py-7">
+          {/* ---------------------------------------------------------------- */}
+          <SectionCard
+            step="1"
+            title="The Child"
+            caption="Who the companion is speaking to."
+            accent="var(--sol-artery)"
+          >
+            <div className="space-y-6">
+              <Field label="Full name">
+                <input
+                  value={patient.name}
+                  onChange={(event) =>
+                    patch('patient_profile', { name: event.target.value })
+                  }
+                  placeholder="Mia Hartono"
+                  className="solace-field"
+                />
+              </Field>
 
-            <Field
-              label="Call me…"
-              hint="The name the companion says out loud."
+              <Field
+                label="Call me…"
+                hint="The name the companion says out loud."
+              >
+                <input
+                  value={patient.preferred_name}
+                  onChange={(event) =>
+                    patch('patient_profile', {
+                      preferred_name: event.target.value,
+                    })
+                  }
+                  placeholder="Mia"
+                  className="solace-field"
+                />
+              </Field>
+
+              <Field label="Gender">
+                <ChoiceRow
+                  options={GENDERS}
+                  value={patient.gender}
+                  onChange={(gender) => patch('patient_profile', { gender })}
+                />
+              </Field>
+
+              <Field
+                label="Age band"
+                hint="Sets vocabulary and pace. No exact age is stored."
+              >
+                <ChoiceRow
+                  options={AGE_BANDS}
+                  value={patient.age_band}
+                  onChange={(age_band) => patch('patient_profile', { age_band })}
+                />
+              </Field>
+            </div>
+          </SectionCard>
+
+          {/* ---------------------------------------------------------------- */}
+          <SectionCard
+            step="2"
+            title="Companion"
+            caption="Pick an avatar, name them, and choose where you meet."
+            accent="var(--sol-surgical)"
+          >
+            <div className="space-y-6">
+              <Field label="Avatar">
+                <ChoiceRow
+                  options={AVATAR_PRESETS.map((preset) => ({
+                    value: preset.id,
+                    label: preset.name,
+                  }))}
+                  value={currentCompanion.avatarId}
+                  onChange={(avatarId) => patchCompanion({ avatarId })}
+                />
+              </Field>
+
+              <Field
+                label="Companion Name"
+                hint="What the child calls them (e.g., Kak Sara)."
+              >
+                <input
+                  value={currentCompanion.calledName}
+                  onChange={(event) =>
+                    patchCompanion({ calledName: event.target.value })
+                  }
+                  placeholder="What the child calls them (e.g., Kak Sara)"
+                  className="solace-field"
+                />
+              </Field>
+
+              <Field label="Scene">
+                <ChoiceRow
+                  options={SCENE_PRESETS.map((scene) => ({
+                    value: scene.id,
+                    label: scene.name,
+                  }))}
+                  value={persona.sceneId}
+                  onChange={(sceneId) => patch('avatar_persona', { sceneId })}
+                />
+              </Field>
+            </div>
+          </SectionCard>
+
+          {/* ---------------------------------------------------------------- */}
+          <SectionCard
+            step="3"
+            title="The Prescription"
+            caption="What this session is for, and what it must never raise."
+            accent="var(--sol-patina)"
+          >
+            <div className="space-y-6">
+              <Field label="Context">
+                <textarea
+                  value={guardrails.therapeutic_goal}
+                  onChange={(event) =>
+                    patch('clinical_guardrails', {
+                      therapeutic_goal: event.target.value,
+                    })
+                  }
+                  rows={4}
+                  placeholder="De-escalate late-night anxiety and stay with her until she can sleep."
+                  className="solace-field resize-none leading-relaxed"
+                />
+              </Field>
+
+              <Field
+                label="Do not mention"
+                hint="Blocked in the prompt, and checked again before the avatar speaks."
+              >
+                <ChipListInput
+                  values={guardrails.hard_boundaries}
+                  onChange={(hard_boundaries) =>
+                    patch('clinical_guardrails', { hard_boundaries })
+                  }
+                  placeholder="Add a topic to block"
+                  variant="boundary"
+                  suggestions={BOUNDARY_SUGGESTIONS}
+                />
+              </Field>
+            </div>
+          </SectionCard>
+
+          <div className="pt-3 pb-10">
+            <button
+              type="button"
+              onClick={onBegin}
+              disabled={!ready}
+              className="solace-cta w-full"
             >
-              <input
-                value={patient.preferred_name}
-                onChange={(event) =>
-                  patch('patient_profile', {
-                    preferred_name: event.target.value,
-                  })
-                }
-                placeholder="Mia"
-                className="solace-field"
-              />
-            </Field>
+              Begin Session
+              <ArrowRight className="size-4" />
+            </button>
 
-            <Field label="Gender">
-              <ChoiceRow
-                options={GENDERS}
-                value={patient.gender}
-                onChange={(gender) => patch('patient_profile', { gender })}
-              />
-            </Field>
-
-            <Field
-              label="Age band"
-              hint="Sets vocabulary and pace. No exact age is stored."
-            >
-              <ChoiceRow
-                options={AGE_BANDS}
-                value={patient.age_band}
-                onChange={(age_band) => patch('patient_profile', { age_band })}
-              />
-            </Field>
+            <p className="mt-3 text-center font-mono text-[11.5px] text-[var(--sol-ink-faint)]">
+              {ready
+                ? 'The avatar speaks only inside these boundaries.'
+                : `Still needed — ${missing.join(', ')}.`}
+            </p>
           </div>
-        </SectionCard>
-
-        {/* ---------------------------------------------------------------- */}
-        <SectionCard
-          step="2"
-          title="Companion"
-          caption="Pick one or two, name them, and choose where you meet."
-          accent="#7c7ff0"
-        >
-          <div className="space-y-6">
-            <Field
-              label={`Avatar · ${persona.companions.length} of 2`}
-              hint={
-                persona.companions.length > 1
-                  ? 'A Perxona scene holds one avatar, so the first one speaks in the session. The second is recorded on the plan.'
-                  : undefined
-              }
-            >
-              <div className="space-y-2">
-                {AVATAR_PRESETS.map((preset) => {
-                  const slot = persona.companions.find(
-                    (entry) => entry.presetId === preset.id,
-                  );
-
-                  return (
-                    <div
-                      key={preset.id}
-                      data-selected={Boolean(slot)}
-                      className="solace-tile overflow-hidden"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleCompanion(preset.id)}
-                        className="flex w-full items-center gap-3.5 p-3.5 text-left"
-                      >
-                        <AvatarPortrait
-                          gradient={preset.gradient}
-                          className="size-11"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[14.5px] font-medium text-white">
-                            {preset.name}
-                          </span>
-                          <span className="mt-0.5 block truncate text-[11.5px] text-white/45">
-                            {preset.blurb}
-                          </span>
-                        </span>
-                        {slot && persona.companions.length > 1 ? (
-                          <span className="shrink-0 rounded-full bg-white/12 px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-white/70 uppercase">
-                            {persona.companions[0]?.presetId === preset.id
-                              ? 'Speaks'
-                              : 'On plan'}
-                          </span>
-                        ) : null}
-
-                        <span
-                          className={
-                            slot
-                              ? 'grid size-5 shrink-0 place-items-center rounded-full bg-[#5cc9de] text-[11px] font-bold text-[#07222b]'
-                              : 'size-5 shrink-0 rounded-full border border-white/22'
-                          }
-                        >
-                          {slot ? '✓' : ''}
-                        </span>
-                      </button>
-
-                      {slot ? (
-                        <div className="border-t border-white/10 bg-black/18 p-3.5">
-                          <span className="solace-label">
-                            The child calls them
-                          </span>
-                          <input
-                            value={slot.calledName}
-                            onChange={(event) =>
-                              renameCompanion(preset.id, event.target.value)
-                            }
-                            placeholder="Papa, Mama, Kak Sara…"
-                            className="solace-field"
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </Field>
-
-            <Field label="Scene">
-              <div className="flex flex-wrap gap-2.5">
-                {SCENE_PRESETS.map((scene) => (
-                  <button
-                    key={scene.id}
-                    type="button"
-                    data-selected={persona.sceneId === scene.id}
-                    onClick={() =>
-                      patch('avatar_persona', { sceneId: scene.id })
-                    }
-                    className="solace-tile w-[124px] p-2.5"
-                  >
-                    <ScenePreview
-                      gradient={scene.gradient}
-                      className="h-[68px] w-full"
-                    />
-                    <span className="mt-2 block text-[12.5px] font-medium text-white">
-                      {scene.name}
-                    </span>
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  title="Import another scene from the organization catalog"
-                  className="grid h-[122px] w-[124px] place-items-center rounded-[18px] border border-dashed border-white/18 text-white/40 transition hover:border-white/40 hover:text-white/75"
-                >
-                  <Plus className="size-6" />
-                </button>
-              </div>
-            </Field>
-          </div>
-        </SectionCard>
-
-        {/* ---------------------------------------------------------------- */}
-        <SectionCard
-          step="3"
-          title="The Prescription"
-          caption="What this session is for, and what it must never raise."
-          accent="#5fcdc0"
-        >
-          <div className="space-y-6">
-            <Field label="Context">
-              <textarea
-                value={guardrails.therapeutic_goal}
-                onChange={(event) =>
-                  patch('clinical_guardrails', {
-                    therapeutic_goal: event.target.value,
-                  })
-                }
-                rows={4}
-                placeholder="De-escalate late-night anxiety and stay with her until she can sleep."
-                className="solace-field resize-none leading-relaxed"
-              />
-            </Field>
-
-            <Field
-              label="Do not mention"
-              hint="Blocked in the prompt, and checked again before the avatar speaks."
-            >
-              <ChipListInput
-                values={guardrails.hard_boundaries}
-                onChange={(hard_boundaries) =>
-                  patch('clinical_guardrails', { hard_boundaries })
-                }
-                placeholder="Add a topic to block"
-                variant="boundary"
-                suggestions={BOUNDARY_SUGGESTIONS}
-              />
-            </Field>
-          </div>
-        </SectionCard>
-
-        <button
-          type="button"
-          onClick={onBegin}
-          disabled={!ready}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#5cc9de] py-4 text-[15px] font-semibold text-[#07222b] transition enabled:hover:bg-[#78d8ea] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Begin Session
-          <ArrowRight className="size-4" />
-        </button>
+        </div>
       </div>
     </div>
   );

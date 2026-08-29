@@ -21,10 +21,13 @@ import { useSpeechRecognition } from '@/lib/speech/use-speech-recognition';
 
 const DEFAULT_MESSAGE = 'Hello! Welcome to my Perxona experience.';
 
+// Keep in sync with FALLBACK_AVATARS in setup-panel.tsx.
+const DEFAULT_AVATAR_ID = '01KVQ57MAC3HT5GWZH5C2J7NZ9';
+
 const INITIAL_CONFIG: ConnectConfig = {
   region: 'asia',
   connectKey: import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? '',
-  avatarId: import.meta.env.VITE_PERXONA_AVATAR_ID ?? '',
+  avatarId: import.meta.env.VITE_PERXONA_AVATAR_ID ?? DEFAULT_AVATAR_ID,
   sceneId: import.meta.env.VITE_PERXONA_SCENE_ID ?? '',
   voiceId: import.meta.env.VITE_PERXONA_VOICE_ID ?? '',
 };

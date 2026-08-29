@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm --prefix app ci",
+  "buildCommand": "npm --prefix app run build",
+  "outputDirectory": "app/dist/client",
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "microphone=(self), on-device-speech-recognition=(self)"
+        }
+      ]
+    }
+  ]
+}

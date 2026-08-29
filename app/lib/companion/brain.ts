@@ -1,9 +1,16 @@
+import { parseBreathingPattern, type BreathingPattern } from './breathing';
 import { buildSystemPrompt } from './prompt';
 import {
   emergencyScript,
   scanPatientUtterance,
   violatesBoundary,
 } from './safety';
+import {
+  fillScript,
+  isScriptedPlan,
+  matchScriptBeat,
+  playedBeats,
+} from './script';
 import type { Prescription } from './types';
 import type {
   PresentationEmotion,
@@ -15,18 +22,25 @@ export type CompanionReply = {
   emotion: PresentationEmotion;
   intensity: PresentationIntensity;
   flag: 'none' | 'distress' | 'emergency';
+  /** The phrase that raised the flag, so the alert can quote what was heard. */
+  flagReason?: string;
   /** Set when a prescribed exercise fired, so the console can show which. */
   firedExercise?: string;
+  /** Set when that exercise is a paced breath, so the stage can count it. */
+  breathing?: BreathingPattern;
 };
 
 /**
  * Produces the companion's next turn.
  *
- * The turn comes from Gemini Flash through `/api/companion`, which assembles
- * the system prompt from the prescription and keeps the key server-side.
- * `localReply` stays as the fallback — a rehearsed, on-script answer keeps the
- * session alive when the key is missing, the network drops, or the model
- * returns something unusable.
+ * Three paths, in order of authority. The safety scan runs first and can end
+ * the turn on its own. The rehearsed demo script answers next, so the stage
+ * conversation in `script.ts` plays back exactly as written. Anything the
+ * script does not cover falls through to the rule-based stand-in below.
+ *
+ * `localReply` is the piece to replace with a call to your own server route —
+ * the prompt is already assembled by `buildSystemPrompt`, and the return shape
+ * matches the JSON the model is asked to emit.
  */
 export async function respond(
   prescription: Prescription,
@@ -43,11 +57,12 @@ export async function respond(
       emotion: 'caring',
       intensity: 'high',
       flag: 'emergency',
+      flagReason: signal.matched[0],
     };
   }
 
   const reply =
-    (await askModel(prescription, utterance, history)) ??
+    scriptedReply(prescription, utterance, history) ??
     localReply(prescription, utterance, history, signal.level);
 
   // The clinician's boundaries win over whatever the generator produced.
@@ -58,13 +73,62 @@ export async function respond(
       emotion: 'caring',
       intensity: 'low',
       flag: reply.flag,
+      flagReason: reply.flagReason,
     };
   }
 
   return reply;
 }
 
-/** Exposed so the console can show the exact prompt the model gets. */
+/**
+ * The rehearsed turn for this utterance, or null when it is off-script.
+ *
+ * Which beats are already spent is replayed from `history` rather than held in
+ * state, so this stays a pure function of the turn it is given.
+ */
+function scriptedReply(
+  prescription: Prescription,
+  utterance: string,
+  history: string[],
+): CompanionReply | null {
+  if (!isScriptedPlan(prescription)) return null;
+
+  const beat = matchScriptBeat(utterance, playedBeats(history));
+  if (!beat) return null;
+
+  // The escalation beat has no written line: the demo has to show the real
+  // break-character path, not a rehearsed copy of it.
+  const say =
+    beat.flag === 'emergency'
+      ? emergencyScript(prescription)
+      : fillScript(beat.say, prescription);
+
+  return {
+    say,
+    emotion: beat.emotion,
+    intensity: beat.intensity,
+    flag: beat.flag,
+    flagReason: beat.flag === 'none' ? undefined : beat.cue,
+    firedExercise: beat.firedExercise,
+    // The counts come from the clinician's own instruction rather than from
+    // the beat, so an edited plan changes what the patient is asked to breathe.
+    breathing: beat.firedExercise
+      ? breathingFor(prescription, beat.firedExercise)
+      : undefined,
+  };
+}
+
+/** The paced-breath counts on the prescribed exercise with this trigger. */
+function breathingFor(prescription: Prescription, trigger: string) {
+  const exercise = prescription.prescribed_interventions.custom_exercises.find(
+    (candidate) => candidate.trigger_condition === trigger,
+  );
+  return exercise
+    ? (parseBreathingPattern(exercise.action_script) ?? undefined)
+    : undefined;
+}
+
+/** Exposed so the console can show the exact prompt a real model would get. */
 export { buildSystemPrompt };
 
 /** Long enough for a Flash turn, short enough that "Thinking" never hangs. */
@@ -129,6 +193,7 @@ function localReply(
         intensity: 'high',
         flag: level,
         firedExercise: exercise.trigger_condition,
+        breathing: parseBreathingPattern(exercise.action_script) ?? undefined,
       };
     }
   }

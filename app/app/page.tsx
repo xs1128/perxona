@@ -37,7 +37,7 @@ export default function Home() {
   };
 
   return (
-    <main className="solace-rail bg-[#07222b]">
+    <main className="solace-rail bg-[var(--sol-paper)]">
       <div
         className="solace-rail-track"
         style={{ transform: `translateY(-${STAGES.indexOf(stage) * 100}dvh)` }}
