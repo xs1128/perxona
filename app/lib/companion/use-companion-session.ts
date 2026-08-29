@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { respond, type CompanionReply } from './brain';
 import type { BreathingPattern } from './breathing';
-import { findAvatarPreset, findScenePreset } from './defaults';
+import { AVATAR_PRESETS, findAvatarPreset } from './defaults';
 import { buildOpeningLine } from './prompt';
 import {
   fillScript,
@@ -49,7 +49,7 @@ export type SessionAlert = {
  * first.
  */
 export function useCompanionSession(prescription: Prescription) {
-  const { ref, state, actions } = usePresenter();
+  const { ref, instanceKey, state, actions } = usePresenter();
   const [live, setLive] = useState(false);
   const [lastSaid, setLastSaid] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -162,10 +162,25 @@ export function useCompanionSession(prescription: Prescription) {
   }, [scripted, history, prescription]);
 
   const companion = prescription.avatar_persona.companions[0];
-  const preset = companion ? findAvatarPreset(companion.presetId) : undefined;
   const avatarId = companion?.avatarId ?? '';
-  const sceneId =
-    findScenePreset(prescription.avatar_persona.sceneId)?.sceneId ?? '';
+  const voiceId = companion?.voiceId || undefined;
+
+  /*
+   * The plan stores catalog IDs, so they reach the Presenter untranslated.
+   * The Scene used to be resolved through a preset-slug table that the console
+   * never wrote into, so any scene the clinician picked resolved to an empty
+   * string and dropped the whole session into rehearsal mode.
+   */
+  const sceneId = prescription.avatar_persona.sceneId;
+
+  /*
+   * Resolved from the Avatar actually on stage, not from the slug beside it —
+   * the slug does not move when the plan is edited, and the portrait did not
+   * either. An Avatar typed in by hand has no preset, and the fallback keeps
+   * the rehearsal stage from going blank; it is a placeholder either way,
+   * since it only shows when no real avatar is connected.
+   */
+  const preset = findAvatarPreset(avatarId) ?? AVATAR_PRESETS[0];
 
   /**
    * Rehearsal voice. Tracked because the microphone has to ignore whatever the
@@ -211,22 +226,46 @@ export function useCompanionSession(prescription: Prescription) {
     );
   };
 
-  /** Warms the runtime while the clinician is still filling the form. */
-  const preload = () => {
+  /**
+   * Starts pulling down the selected Avatar and Scene. Safe to call repeatedly:
+   * `connect()` joins the attempt already in flight when the target is
+   * unchanged, and replaces the stage when it is not.
+   */
+  const warm = useCallback(() => {
     if (CONNECT_KEY && avatarId && sceneId) {
-      // Calling connect here initializes the runtime and starts downloading the heavy 3D assets early.
-      // Audio playback won't be resumed until the user clicks 'Begin Session'.
-      void actions.connect(REGION, CONNECT_KEY, {
-        avatarId,
-        sceneId,
-        voiceId: companion?.voiceId || undefined,
-      });
+      // Initializes the runtime and starts downloading the heavy 3D assets
+      // early. Audio stays suspended until `begin()` resumes it inside a click.
+      void actions.connect(REGION, CONNECT_KEY, { avatarId, sceneId, voiceId });
     } else {
       void loadPresenterRuntime(REGION).catch(() => {
         // A failed preload is not fatal; `begin()` retries and reports.
       });
     }
-  };
+  }, [actions, avatarId, sceneId, voiceId]);
+
+  /** Set once the clinician reaches the console, where preloading is wanted. */
+  const preloadArmedRef = useRef(false);
+
+  /** Warms the runtime while the clinician is still filling the form. */
+  const preload = useCallback(() => {
+    preloadArmedRef.current = true;
+    warm();
+  }, [warm]);
+
+  /*
+   * Follow the form. Preloading once on arrival pinned the stage to whatever
+   * the plan happened to open with, so every later edit had to be paid for as
+   * a re-target at `begin()` — re-warming here means the companion and scene
+   * the clinician actually chose are already loading before they press Begin.
+   *
+   * Debounced, because clicking along the avatar row would otherwise tear the
+   * stage down and rebuild it once per click.
+   */
+  useEffect(() => {
+    if (!preloadArmedRef.current) return;
+    const timer = setTimeout(warm, 500);
+    return () => clearTimeout(timer);
+  }, [warm]);
 
   const say = async (reply: CompanionReply) => {
     beginDelivery(reply.say);
@@ -283,11 +322,18 @@ export function useCompanionSession(prescription: Prescription) {
         ? await actions.connect(REGION, CONNECT_KEY, {
             avatarId,
             sceneId,
-            voiceId: companion?.voiceId || undefined,
+            voiceId,
           })
         : false;
 
     setLive(connected);
+
+    /*
+     * A re-target builds a new element, and the audio context resumed inside
+     * the click belonged to the one it replaced. Resuming again is a no-op when
+     * nothing was replaced, and the page carries user activation either way.
+     */
+    if (connected) await actions.resumeAudio();
 
     const opening = buildOpeningLine(prescription);
     beginDelivery(opening);
@@ -372,6 +418,8 @@ export function useCompanionSession(prescription: Prescription) {
 
   return {
     ref,
+    /** Must be the `<sv-presenter>` element's `key` — see `usePresenter`. */
+    instanceKey,
     state,
     live,
     /** True whichever voice is talking — the Presenter's or the browser's. */

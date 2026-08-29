@@ -25,6 +25,7 @@ export function Session({
   // `session.ref` makes the compiler treat the whole object as a ref.
   const {
     ref,
+    instanceKey,
     live,
     state,
     preset,
@@ -191,6 +192,10 @@ export function Session({
         never `display: none` — a hidden element gives the renderer a 0x0
         canvas, and the Presenter can stall at `Initializing` rather than
         reaching `Ready`. It fades in instead.
+
+        `key` is load-bearing: an element is bound to the Avatar and Scene it
+        was initialized with, so `usePresenter` changes the target by bumping
+        this and initializing the replacement.
       */}
       <div
         className={`absolute inset-0 transition-opacity duration-500 ${
@@ -198,7 +203,11 @@ export function Session({
         }`}
       >
         {/* @ts-expect-error sv-presenter is provided by the Perxona runtime. */}
-        <sv-presenter ref={ref} className="block h-full w-full" />
+        <sv-presenter
+          key={instanceKey}
+          ref={ref}
+          className="block h-full w-full"
+        />
       </div>
 
       {/* Stand-in stage when no catalog IDs are configured. */}

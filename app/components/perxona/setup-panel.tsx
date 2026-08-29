@@ -8,6 +8,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from '@/components/ui/native-select';
+import { KNOWN_AVATARS } from '@/lib/perxona/catalog';
 import type { useCatalog } from '@/lib/perxona/use-catalog';
 import type { ConnectConfig, Region } from '@/lib/perxona/types';
 
@@ -23,12 +24,6 @@ type SetupPanelProps = {
 };
 
 /** Built-in avatars shown by name, even before the org catalog is loaded. */
-const FALLBACK_AVATARS = [
-  { id: '01KVQ57MAC3HT5GWZH5C2J7NZ9', name: 'cc076_female_twtoy_01' },
-  { id: '01KMFR2EGZN6JAWY70K4H77C3S', name: 'cc076a04_female_ntpc_01' },
-  { id: '01KVQ59VW18PC6P2HQET51NMYS', name: 'cc092a01_female_xrspace_mushroom_02' },
-];
-
 /** Picks from the loaded catalog when it is available, types an ID when not. */
 function IdField({
   id,
@@ -89,7 +84,7 @@ export function SetupPanel({
   // Prefer the org catalog once it's loaded; otherwise fall back to the
   // built-in avatar list so the field is always a name-based dropdown.
   const avatarOptions =
-    catalog.avatars.length > 0 ? catalog.avatars : FALLBACK_AVATARS;
+    catalog.avatars.length > 0 ? catalog.avatars : KNOWN_AVATARS;
 
   return (
     <div className="z-20 m-auto w-full max-w-md p-6 sm:p-10">

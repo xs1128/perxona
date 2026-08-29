@@ -3,29 +3,13 @@
 import { ArrowRight, ChevronLeft } from 'lucide-react';
 
 import { ChipListInput, ChoiceRow, Field, SectionCard } from './controls';
+import { AVATAR_PRESETS, SCENE_PRESETS } from '@/lib/companion/defaults';
 import { AGE_BANDS, GENDERS, type Prescription } from '@/lib/companion/types';
 
 const BOUNDARY_SUGGESTIONS = [
   'Car accidents',
   'The night her parents died',
   'Hospital environments',
-];
-
-/** Built-in avatars, shown by name — the child's caregiver never sees a raw ID. */
-const AVATAR_PRESETS = [
-  { id: '01KVQ57MAC3HT5GWZH5C2J7NZ9', name: 'cc076_female_twtoy_01' },
-  { id: '01KMFR2EGZN6JAWY70K4H77C3S', name: 'cc076a04_female_ntpc_01' },
-  {
-    id: '01KVQ59VW18PC6P2HQET51NMYS',
-    name: 'cc092a01_female_xrspace_mushroom_02',
-  },
-];
-
-/** Fixed set of three scenes, shown as a plain text choice — no visuals. */
-const SCENE_PRESETS = [
-  { id: '01KWVBXE9Q9CZ9FENATQHZYXJV', name: 'High-Tech Lab' },
-  { id: '01KWVBVQBZ5FV2BYKDTQ40V9AF', name: 'Sunset Valley' },
-  { id: '01KQEJD0NJFVM20M588K7D1E9Z', name: 'Food Advisor Studio' },
 ];
 
 /**
@@ -69,6 +53,20 @@ export function Console({
   const patchCompanion = (patch_: Partial<typeof currentCompanion>) => {
     patch('avatar_persona', {
       companions: [{ ...currentCompanion, ...patch_ }],
+    });
+  };
+
+  /**
+   * Picking an avatar moves the whole preset, not just the ID: the slug and
+   * Voice travel with it, so the portrait on stage and the voice that speaks
+   * both follow the choice instead of staying on the plan's original preset.
+   */
+  const chooseAvatar = (avatarId: string) => {
+    const preset = AVATAR_PRESETS.find((entry) => entry.avatarId === avatarId);
+    patchCompanion({
+      avatarId,
+      presetId: preset?.id ?? 'custom',
+      voiceId: preset?.voiceId ?? currentCompanion.voiceId,
     });
   };
 
@@ -174,11 +172,11 @@ export function Console({
               <Field label="Avatar">
                 <ChoiceRow
                   options={AVATAR_PRESETS.map((preset) => ({
-                    value: preset.id,
+                    value: preset.avatarId,
                     label: preset.name,
                   }))}
                   value={currentCompanion.avatarId}
-                  onChange={(avatarId) => patchCompanion({ avatarId })}
+                  onChange={chooseAvatar}
                 />
               </Field>
 
@@ -199,7 +197,7 @@ export function Console({
               <Field label="Scene">
                 <ChoiceRow
                   options={SCENE_PRESETS.map((scene) => ({
-                    value: scene.id,
+                    value: scene.sceneId,
                     label: scene.name,
                   }))}
                   value={persona.sceneId}
