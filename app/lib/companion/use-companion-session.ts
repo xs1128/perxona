@@ -13,54 +13,36 @@ const REGION = 'asia' as const;
 
 const CONNECT_KEY = import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? '';
 
-/** The care plan allows two companions, so two stages are always mounted. */
-const MAX_STAGES = 2;
-
 export type SessionAlert = {
   level: 'distress' | 'emergency';
   detail: string;
 };
 
 /**
- * Owns the Perxona connections for the whole flow.
+ * Owns the Perxona connection for the whole flow.
  *
  * It lives above the rail because `resumeAudioPlayback()` has to run inside
  * the click that starts the session, and that click happens on the console
- * screen — not on the stage the avatars render into.
+ * screen — not on the stage the avatar renders into.
  *
- * One Presenter renders exactly one `avatarId`, so two companions means two
- * elements, each initialized separately. Both are mounted unconditionally
- * because hooks cannot be called in a loop.
+ * One Presenter renders one `avatarId` into its own required `sceneId`, and
+ * the catalog has no transparent scene, so two avatars cannot share a
+ * background. A plan may prescribe two companions; the session speaks as the
+ * first.
  */
 export function useCompanionSession(prescription: Prescription) {
-  const first = usePresenter();
-  const second = usePresenter();
-  const stages = [first, second];
-
-  const [liveCount, setLiveCount] = useState(0);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const { ref, state, actions } = usePresenter();
+  const [live, setLive] = useState(false);
   const [lastSaid, setLastSaid] = useState('');
   const [thinking, setThinking] = useState(false);
   const [alert, setAlert] = useState<SessionAlert | null>(null);
   const [history, setHistory] = useState<string[]>([]);
 
-  const companions = prescription.avatar_persona.companions.slice(
-    0,
-    MAX_STAGES,
-  );
+  const companion = prescription.avatar_persona.companions[0];
+  const preset = companion ? findAvatarPreset(companion.presetId) : undefined;
+  const avatarId = companion?.avatarId ?? '';
   const sceneId =
     findScenePreset(prescription.avatar_persona.sceneId)?.sceneId ?? '';
-
-  const cast = companions.map((slot, index) => ({
-    ...slot,
-    index,
-    preset: findAvatarPreset(slot.presetId),
-    stage: stages[index],
-    live: index < liveCount,
-  }));
-
-  const active = cast[activeIndex] ?? cast[0];
-  const live = liveCount > 0;
 
   /** Warms the runtime while the clinician is still filling the form. */
   const preload = () => {
@@ -84,54 +66,38 @@ export function useCompanionSession(prescription: Prescription) {
       });
     }
 
-    if (active?.live) {
-      await active.stage.actions.present(reply.say, {
+    if (live) {
+      await actions.present(reply.say, {
         emotion: reply.emotion,
         intensity: reply.intensity,
       });
       return;
     }
 
-    // Rehearsal: the browser voice stands in when no stage connected.
+    // Rehearsal: the browser voice stands in when no catalog IDs are set.
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(new SpeechSynthesisUtterance(reply.say));
   };
 
-  /**
-   * Must be called directly from the user's click.
-   *
-   * Stages connect in order and stop at the first failure, so a second avatar
-   * the runtime or the plan cannot support degrades to a single companion
-   * rather than leaving a dead half-screen.
-   */
+  /** Must be called directly from the user's click. */
   const begin = async () => {
-    let connected = 0;
+    const connected =
+      CONNECT_KEY && avatarId && sceneId
+        ? await actions.connect(REGION, CONNECT_KEY, {
+            avatarId,
+            sceneId,
+            voiceId: companion?.voiceId || undefined,
+          })
+        : false;
 
-    if (CONNECT_KEY && sceneId) {
-      for (const member of cast) {
-        if (!member.avatarId) break;
-
-        const ok = await member.stage.actions.connect(REGION, CONNECT_KEY, {
-          avatarId: member.avatarId,
-          sceneId,
-          voiceId: member.voiceId || undefined,
-        });
-
-        if (!ok) break;
-
-        member.stage.actions.setCameraAngle('halfbody');
-        connected += 1;
-      }
-    }
-
-    setLiveCount(connected);
-    setActiveIndex(0);
+    setLive(connected);
+    if (connected) actions.setCameraAngle('halfbody');
 
     const opening = buildOpeningLine(prescription);
     setLastSaid(opening);
 
-    if (connected > 0) {
-      await stages[0].actions.present(opening, {
+    if (connected) {
+      await actions.present(opening, {
         emotion: 'caring',
         intensity: 'neutral',
       });
@@ -146,61 +112,42 @@ export function useCompanionSession(prescription: Prescription) {
     if (!utterance) return;
 
     setThinking(true);
-    active?.stage.actions.setThinking(true);
+    if (live) actions.setThinking(true);
     try {
       const reply = await respond(prescription, utterance, history);
       setHistory((current) => [...current, utterance]);
       await say(reply);
     } finally {
       setThinking(false);
-      active?.stage.actions.setThinking(false);
+      if (live) actions.setThinking(false);
     }
-  };
-
-  /** Both companions look up when the child speaks; only one answers. */
-  const setListening = (listening: boolean) => {
-    for (const member of cast) {
-      if (member.live) member.stage.actions.setListening(listening);
-    }
-  };
-
-  const switchTo = (index: number) => {
-    if (index === activeIndex || !cast[index]) return;
-    for (const member of cast) {
-      if (member.live) member.stage.actions.interrupt();
-    }
-    window.speechSynthesis.cancel();
-    setActiveIndex(index);
   };
 
   const end = () => {
     window.speechSynthesis.cancel();
-    for (const member of cast) {
-      if (member.live) member.stage.actions.interrupt();
-    }
+    if (live) actions.interrupt();
     setAlert(null);
     setLastSaid('');
   };
 
-  const status = stages[0].state;
-
   return {
-    cast,
-    active,
-    activeIndex,
-    switchTo,
+    ref,
+    state,
     live,
-    liveCount,
-    state: status,
-    caption:
-      cast.find((member) => member.live && member.stage.state.caption)?.stage
-        .state.caption ?? '',
-    error: stages.map((stage) => stage.state.error).find(Boolean) ?? null,
+    preset,
+    companion,
     lastSaid,
     thinking,
     alert,
     dismissAlert: () => setAlert(null),
-    setListening,
+    /*
+     * Presenter methods only exist once the runtime has upgraded the element,
+     * and optional chaining guards a null element, not a missing method. Every
+     * call is therefore gated on a live connection.
+     */
+    setListening: (listening: boolean) => {
+      if (live) actions.setListening(listening);
+    },
     preload,
     begin,
     send,

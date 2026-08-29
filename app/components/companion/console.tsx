@@ -181,7 +181,14 @@ export function Console({
           accent="#7c7ff0"
         >
           <div className="space-y-6">
-            <Field label={`Avatar · ${persona.companions.length} of 2`}>
+            <Field
+              label={`Avatar · ${persona.companions.length} of 2`}
+              hint={
+                persona.companions.length > 1
+                  ? 'A Perxona scene holds one avatar, so the first one speaks in the session. The second is recorded on the plan.'
+                  : undefined
+              }
+            >
               <div className="space-y-2">
                 {AVATAR_PRESETS.map((preset) => {
                   const slot = persona.companions.find(
@@ -211,6 +218,14 @@ export function Console({
                             {preset.blurb}
                           </span>
                         </span>
+                        {slot && persona.companions.length > 1 ? (
+                          <span className="shrink-0 rounded-full bg-white/12 px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-white/70 uppercase">
+                            {persona.companions[0]?.presetId === preset.id
+                              ? 'Speaks'
+                              : 'On plan'}
+                          </span>
+                        ) : null}
+
                         <span
                           className={
                             slot
