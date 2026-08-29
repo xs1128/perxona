@@ -15,8 +15,8 @@ import type {
 
 const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-/** The latest stable Flash model; override with GEMINI_MODEL in `.env`. */
-const DEFAULT_MODEL = 'gemini-3.7-flash';
+/** Flash model used unless GEMINI_MODEL overrides it in `.env`. */
+const DEFAULT_MODEL = 'gemini-3.6-flash';
 
 const INTENSITIES = ['low', 'neutral', 'high'] as const;
 const FLAGS = ['none', 'distress', 'emergency'] as const;
