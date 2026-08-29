@@ -28,6 +28,10 @@ GitHub repository, OpenAPI contract, Motion Browser source, and
    - How motion IDs are obtained and used
    - Motion Browser behavior and pagination caveat
    - Custom VRM requirements and current beta limitations
+5. [Selecting catalog IDs](05-selecting-catalog-ids.md)
+   - How to query Avatar, Scene, Voice, and Motion IDs
+   - Which response field belongs in each Presenter setting
+   - How to keep organization catalogs and keys out of source control
 
 ## What Connect Kit is
 

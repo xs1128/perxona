@@ -1,6 +1,6 @@
 # Motion Browser, Motion IDs, and Custom VRM
 
-[← Integration patterns](03-integration-patterns.md) · [Documentation index](README.md)
+[← Integration patterns](03-integration-patterns.md) · [Documentation index](README.md) · [Selecting catalog IDs →](05-selecting-catalog-ids.md)
 
 This document explains how the official Motion Browser discovers Motion IDs and records the current requirements and limitations for custom VRM avatars.
 
