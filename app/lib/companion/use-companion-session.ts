@@ -41,6 +41,7 @@ export function useCompanionSession(prescription: Prescription) {
   const [lastSaid, setLastSaid] = useState('');
   const [thinking, setThinking] = useState(false);
   const [alert, setAlert] = useState<SessionAlert | null>(null);
+  /** Alternating turns — patient, companion, patient… — sent as context to the model. */
   const [history, setHistory] = useState<string[]>([]);
   const [performing, setPerforming] = useState<{
     emotion: PresentationEmotion;
@@ -213,7 +214,7 @@ export function useCompanionSession(prescription: Prescription) {
     if (live) actions.setThinking(true);
     try {
       const reply = await respond(prescription, utterance, history);
-      setHistory((current) => [...current, utterance]);
+      setHistory((current) => [...current, utterance, reply.say]);
       await say(reply);
     } finally {
       setThinking(false);
@@ -231,6 +232,7 @@ export function useCompanionSession(prescription: Prescription) {
     if (live) actions.interrupt();
     setAlert(null);
     setLastSaid('');
+    setHistory([]);
     setPerforming(null);
   };
 

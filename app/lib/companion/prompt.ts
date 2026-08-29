@@ -1,6 +1,20 @@
 import { AGE_BANDS, CLINICAL_DIRECTIVES, type Prescription } from './types';
 
 /**
+ * The emotions the model may pick for the avatar's performance. The route
+ * enforces the same list as the response schema, so it is declared once here.
+ */
+export const REPLY_EMOTIONS = [
+  'caring',
+  'joy',
+  'curiosity',
+  'gratitude',
+  'admiration',
+  'realization',
+  'sadness',
+] as const;
+
+/**
  * Renders the prescription into the system prompt sent to the language model.
  *
  * The console shows this verbatim so a clinician can read exactly what their
@@ -123,11 +137,13 @@ export function buildSystemPrompt(prescription: Prescription): string {
     }
   }
 
+  const emotionList = REPLY_EMOTIONS.map((value) => `"${value}"`).join('|');
+
   lines.push(
     '',
     '## Response format',
     'Reply with JSON only:',
-    '{ "say": string, "emotion": "caring"|"joy"|"curiosity"|"gratitude"|"admiration"|"realization"|"sadness", "intensity": "low"|"neutral"|"high", "flag": "none"|"distress"|"emergency" }',
+    `{ "say": string, "emotion": ${emotionList}, "intensity": "low"|"neutral"|"high", "flag": "none"|"distress"|"emergency" }`,
   );
 
   return lines.join('\n');

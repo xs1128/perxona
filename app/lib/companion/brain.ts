@@ -22,10 +22,11 @@ export type CompanionReply = {
 /**
  * Produces the companion's next turn.
  *
- * The rule-based path below is a stand-in so the flow is demonstrable with no
- * backend. Replace `localReply` with a call to your own server route — the
- * prompt is already assembled by `buildSystemPrompt`, and the return shape
- * matches the JSON the model is asked to emit.
+ * The turn comes from Gemini Flash through `/api/companion`, which assembles
+ * the system prompt from the prescription and keeps the key server-side.
+ * `localReply` stays as the fallback — a rehearsed, on-script answer keeps the
+ * session alive when the key is missing, the network drops, or the model
+ * returns something unusable.
  */
 export async function respond(
   prescription: Prescription,
@@ -34,6 +35,8 @@ export async function respond(
 ): Promise<CompanionReply> {
   const signal = scanPatientUtterance(utterance, prescription);
 
+  // The emergency script is local on purpose: it must fire word-for-word even
+  // when the model is unreachable.
   if (signal.level === 'emergency') {
     return {
       say: emergencyScript(prescription),
@@ -43,7 +46,9 @@ export async function respond(
     };
   }
 
-  const reply = localReply(prescription, utterance, history, signal.level);
+  const reply =
+    (await askModel(prescription, utterance, history)) ??
+    localReply(prescription, utterance, history, signal.level);
 
   // The clinician's boundaries win over whatever the generator produced.
   const breached = violatesBoundary(reply.say, prescription);
@@ -59,8 +64,50 @@ export async function respond(
   return reply;
 }
 
-/** Exposed so the console can show the exact prompt a real model would get. */
+/** Exposed so the console can show the exact prompt the model gets. */
 export { buildSystemPrompt };
+
+/** Long enough for a Flash turn, short enough that "Thinking" never hangs. */
+const MODEL_TIMEOUT_MS = 15_000;
+
+/**
+ * One turn from the model, or null for any failure — a missing key, a network
+ * drop, a timeout, a malformed reply — so the caller can fall back seamlessly.
+ */
+async function askModel(
+  prescription: Prescription,
+  utterance: string,
+  history: string[],
+): Promise<CompanionReply | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+
+  try {
+    const response = await fetch('/api/companion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prescription, utterance, history }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+
+    const { reply } = (await response.json()) as { reply?: CompanionReply };
+    if (
+      !reply?.say?.trim() ||
+      !reply.emotion ||
+      !reply.intensity ||
+      !reply.flag
+    ) {
+      return null;
+    }
+
+    return { ...reply, say: reply.say.trim() };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function localReply(
   prescription: Prescription,
