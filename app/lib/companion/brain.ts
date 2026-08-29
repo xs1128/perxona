@@ -4,6 +4,12 @@ import {
   scanPatientUtterance,
   violatesBoundary,
 } from './safety';
+import {
+  fillScript,
+  isScriptedPlan,
+  matchScriptBeat,
+  playedBeats,
+} from './script';
 import type { Prescription } from './types';
 import type {
   PresentationEmotion,
@@ -22,9 +28,13 @@ export type CompanionReply = {
 /**
  * Produces the companion's next turn.
  *
- * The rule-based path below is a stand-in so the flow is demonstrable with no
- * backend. Replace `localReply` with a call to your own server route — the
- * prompt is already assembled by `buildSystemPrompt`, and the return shape
+ * Three paths, in order of authority. The safety scan runs first and can end
+ * the turn on its own. The rehearsed demo script answers next, so the stage
+ * conversation in `script.ts` plays back exactly as written. Anything the
+ * script does not cover falls through to the rule-based stand-in below.
+ *
+ * `localReply` is the piece to replace with a call to your own server route —
+ * the prompt is already assembled by `buildSystemPrompt`, and the return shape
  * matches the JSON the model is asked to emit.
  */
 export async function respond(
@@ -43,7 +53,9 @@ export async function respond(
     };
   }
 
-  const reply = localReply(prescription, utterance, history, signal.level);
+  const reply =
+    scriptedReply(prescription, utterance, history) ??
+    localReply(prescription, utterance, history, signal.level);
 
   // The clinician's boundaries win over whatever the generator produced.
   const breached = violatesBoundary(reply.say, prescription);
@@ -57,6 +69,38 @@ export async function respond(
   }
 
   return reply;
+}
+
+/**
+ * The rehearsed turn for this utterance, or null when it is off-script.
+ *
+ * Which beats are already spent is replayed from `history` rather than held in
+ * state, so this stays a pure function of the turn it is given.
+ */
+function scriptedReply(
+  prescription: Prescription,
+  utterance: string,
+  history: string[],
+): CompanionReply | null {
+  if (!isScriptedPlan(prescription)) return null;
+
+  const beat = matchScriptBeat(utterance, playedBeats(history));
+  if (!beat) return null;
+
+  // The escalation beat has no written line: the demo has to show the real
+  // break-character path, not a rehearsed copy of it.
+  const say =
+    beat.flag === 'emergency'
+      ? emergencyScript(prescription)
+      : fillScript(beat.say, prescription);
+
+  return {
+    say,
+    emotion: beat.emotion,
+    intensity: beat.intensity,
+    flag: beat.flag,
+    firedExercise: beat.firedExercise,
+  };
 }
 
 /** Exposed so the console can show the exact prompt a real model would get. */

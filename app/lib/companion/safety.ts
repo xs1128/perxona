@@ -26,11 +26,19 @@ const EMERGENCY_PATTERNS = [
   'disappear forever',
 ];
 
+/**
+ * Speech recognition and phone keyboards both emit a curly apostrophe, which
+ * would slip straight past a pattern written with a straight one.
+ */
+function normalizeQuotes(text: string) {
+  return text.toLowerCase().replace(/[\u2018\u2019\u02bc]/g, "'");
+}
+
 export function scanPatientUtterance(
   text: string,
   prescription: Prescription,
 ): SafetySignal {
-  const haystack = text.toLowerCase();
+  const haystack = normalizeQuotes(text);
 
   const emergency = EMERGENCY_PATTERNS.filter((pattern) =>
     haystack.includes(pattern),
@@ -54,7 +62,7 @@ export function violatesBoundary(
   reply: string,
   prescription: Prescription,
 ): string | null {
-  const haystack = reply.toLowerCase();
+  const haystack = normalizeQuotes(reply);
   for (const boundary of prescription.clinical_guardrails.hard_boundaries) {
     const term = boundary.trim().toLowerCase();
     if (term.length > 3 && haystack.includes(term)) return boundary;

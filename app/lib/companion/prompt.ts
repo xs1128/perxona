@@ -1,3 +1,4 @@
+import { fillScript, isScriptedPlan, SCRIPT_OPENING } from './script';
 import { AGE_BANDS, CLINICAL_DIRECTIVES, type Prescription } from './types';
 
 /**
@@ -139,6 +140,12 @@ function humanize(value: string) {
 
 /** The first thing the companion says, built from the plan's safe anchors. */
 export function buildOpeningLine(prescription: Prescription): string {
+  // The demo plan opens on its rehearsed line, which already carries the
+  // clinician's name — that is what proves the avatar arrives knowing her.
+  if (isScriptedPlan(prescription)) {
+    return fillScript(SCRIPT_OPENING, prescription);
+  }
+
   const name =
     prescription.patient_profile.preferred_name ||
     prescription.patient_profile.name ||
