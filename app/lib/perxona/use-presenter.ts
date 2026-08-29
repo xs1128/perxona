@@ -49,6 +49,55 @@ const INITIAL_STATE: PresenterState = {
   speaking: false,
 };
 
+const PRESENTER_STATUSES: readonly PresenterStatus[] = [
+  'Uninitialized',
+  'Initializing',
+  'Ready',
+];
+
+const PERFORMANCE_STATES: readonly PerformanceState[] = [
+  'Idle',
+  'Listening',
+  'Thinking',
+  'Talking',
+];
+
+/**
+ * `initializeWithConnectKey()` resolves once the handshake succeeds, which is
+ * well before the Avatar, Scene, and motion assets have finished downloading.
+ * Presenting in that window fails with 101 PRESENTER_NOT_READY, so every call
+ * waits for `PRESENTER_STATUS: Ready` first.
+ */
+const READY_TIMEOUT_MS = 60_000;
+
+/** How long a later `present()` waits if readiness lapsed mid-session. */
+const PRESENT_READY_TIMEOUT_MS = 15_000;
+
+type ReadyGate = { promise: Promise<void>; open: () => void };
+
+function createReadyGate(): ReadyGate {
+  let open: () => void = () => {};
+  const promise = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { promise, open };
+}
+
+/** Resolves true when the gate opens, false if it times out first. */
+async function waitForGate(gate: ReadyGate, timeoutMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeout = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([gate.promise.then(() => true as const), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /*
  * Event payload field names are not published in the handbook, so every reader
  * below accepts the plausible shapes and falls back to a bare string detail.
@@ -67,6 +116,33 @@ function readStringDetail(event: Event, ...keys: string[]) {
     }
   }
   return '';
+}
+
+/**
+ * Finds a known enum member anywhere in the payload.
+ *
+ * Reading by key name would silently drop the status if the runtime nests it
+ * or names the field something else — and a missed `Ready` strands the whole
+ * session at `Initializing`.
+ */
+function readEnumDetail<T extends string>(
+  event: Event,
+  allowed: readonly T[],
+): T | null {
+  const detail = detailOf(event);
+
+  const match = (value: unknown): value is T =>
+    typeof value === 'string' && (allowed as readonly string[]).includes(value);
+
+  if (match(detail)) return detail;
+
+  if (detail && typeof detail === 'object') {
+    for (const value of Object.values(detail as Record<string, unknown>)) {
+      if (match(value)) return value;
+    }
+  }
+
+  return null;
 }
 
 function readProgress(event: Event): AssetProgress | null {
@@ -90,9 +166,23 @@ export function usePresenter() {
   const elementRef = useRef<PresenterElement | null>(null);
   const [state, setState] = useState<PresenterState>(INITIAL_STATE);
 
+  // Opened by `PRESENTER_STATUS: Ready`; awaited by everything that performs.
+  const gateRef = useRef<ReadyGate | null>(null);
+  const readyRef = useRef(false);
+
   const patch = useCallback((next: Partial<PresenterState>) => {
     setState((current) => ({ ...current, ...next }));
   }, []);
+
+  const gate = useCallback(() => {
+    gateRef.current ??= createReadyGate();
+    return gateRef.current;
+  }, []);
+
+  const markReady = useCallback(() => {
+    readyRef.current = true;
+    gate().open();
+  }, [gate]);
 
   const ref = useCallback(
     (element: PresenterElement | null) => {
@@ -105,13 +195,15 @@ export function usePresenter() {
         [
           'PRESENTER_STATUS',
           (event) => {
-            const status = readStringDetail(event, 'status', 'state');
-            if (
-              status === 'Ready' ||
-              status === 'Initializing' ||
-              status === 'Uninitialized'
-            ) {
-              patch({ status });
+            const status = readEnumDetail(event, PRESENTER_STATUSES);
+            if (!status) return;
+
+            patch({ status });
+
+            if (status === 'Ready') markReady();
+            else if (status === 'Uninitialized') {
+              readyRef.current = false;
+              gateRef.current = createReadyGate();
             }
           },
         ],
@@ -134,15 +226,8 @@ export function usePresenter() {
         [
           'PERFORMANCE_STATE',
           (event) => {
-            const next = readStringDetail(event, 'state', 'status');
-            if (
-              next === 'Idle' ||
-              next === 'Listening' ||
-              next === 'Thinking' ||
-              next === 'Talking'
-            ) {
-              patch({ performanceState: next });
-            }
+            const next = readEnumDetail(event, PERFORMANCE_STATES);
+            if (next) patch({ performanceState: next });
           },
         ],
         [
@@ -189,7 +274,17 @@ export function usePresenter() {
         }
       };
     },
-    [patch],
+    [markReady, patch],
+  );
+
+  /** Blocks until the Presenter reports `Ready`, or the wait runs out. */
+  const awaitReady = useCallback(
+    async (timeoutMs: number) => {
+      if (readyRef.current) return true;
+      if (!gateRef.current) return false;
+      return waitForGate(gateRef.current, timeoutMs);
+    },
+    [],
   );
 
   /** Wraps a Presenter call so a failed result surfaces instead of vanishing. */
@@ -204,6 +299,12 @@ export function usePresenter() {
         return { success: false, code: 100, message };
       }
 
+      // A performance issued before the assets land returns 101, so wait it out
+      // rather than handing the caller an avoidable PRESENTER_NOT_READY.
+      if (!readyRef.current && gateRef.current) {
+        await awaitReady(PRESENT_READY_TIMEOUT_MS);
+      }
+
       try {
         const result = await action(presenter);
         const failure = describeResult(result);
@@ -216,7 +317,7 @@ export function usePresenter() {
         return { success: false, message };
       }
     },
-    [patch],
+    [awaitReady, patch],
   );
 
   const actions = useMemo(() => {
@@ -236,6 +337,10 @@ export function usePresenter() {
           status: 'Initializing',
         });
 
+        readyRef.current = false;
+        const readyGate = createReadyGate();
+        gateRef.current = readyGate;
+
         try {
           await loadPresenterRuntime(region);
           const presenter = elementRef.current;
@@ -245,6 +350,14 @@ export function usePresenter() {
           await presenter.resumeAudioPlayback();
           await presenter.initializeWithConnectKey(connectKey, target);
 
+          const ready = await waitForGate(readyGate, READY_TIMEOUT_MS);
+          if (!ready) {
+            throw new Error(
+              'The avatar never finished initializing. Check that the Avatar, Scene, and Voice IDs belong to this Connect key’s organization and region.',
+            );
+          }
+
+          readyRef.current = true;
           patch({ phase: 'live', status: 'Ready', progress: null });
           return true;
         } catch (error) {
@@ -317,6 +430,8 @@ export function usePresenter() {
       },
 
       reset() {
+        readyRef.current = false;
+        gateRef.current = null;
         setState(INITIAL_STATE);
       },
     };
