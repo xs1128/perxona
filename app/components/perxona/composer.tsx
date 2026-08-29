@@ -1,7 +1,14 @@
 'use client';
 
 import { useRef, type SyntheticEvent } from 'react';
-import { LoaderCircle, Mic, RotateCcw, Send, Square, Upload } from 'lucide-react';
+import {
+  LoaderCircle,
+  Mic,
+  RotateCcw,
+  Send,
+  Square,
+  Upload,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -30,6 +37,7 @@ type ComposerProps = {
   sourceLabel: string;
   mic: {
     supported: boolean;
+    preparing: boolean;
     listening: boolean;
     interim: string;
     start: () => void;
@@ -126,7 +134,7 @@ export function Composer({
           {mic.supported && (
             <Button
               type="button"
-              variant={mic.listening ? 'default' : 'ghost'}
+              variant={mic.preparing || mic.listening ? 'default' : 'ghost'}
               size="icon-sm"
               onPointerDown={mic.start}
               onPointerUp={mic.stop}
@@ -134,7 +142,7 @@ export function Composer({
               aria-label="Hold to talk"
               className="rounded-xl"
             >
-              {mic.listening ? <Square /> : <Mic />}
+              {mic.preparing || mic.listening ? <Square /> : <Mic />}
             </Button>
           )}
 

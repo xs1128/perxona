@@ -150,20 +150,22 @@ export function Session({
   /* One word for what the avatar is doing, plus how it is doing it. */
   const stage = thinking
     ? { label: 'Thinking', tone: '#f5c563' }
-    : mic.listening
-      ? { label: 'Listening', tone: '#5cc9de' }
-      : state.phase === 'connecting'
-        ? {
-            label: state.progress
-              ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
-              : 'Connecting',
-            tone: '#f5c563',
-          }
-        : speaking
-          ? { label: 'Speaking', tone: '#5fcdc0' }
-          : live
-            ? { label: 'Listening for you', tone: '#ffffff' }
-            : { label: 'Rehearsal mode', tone: '#ffffff' };
+    : mic.preparing
+      ? { label: 'Preparing speech', tone: '#f5c563' }
+      : mic.listening
+        ? { label: 'Listening', tone: '#5cc9de' }
+        : state.phase === 'connecting'
+          ? {
+              label: state.progress
+                ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
+                : 'Connecting',
+              tone: '#f5c563',
+            }
+          : speaking
+            ? { label: 'Speaking', tone: '#5fcdc0' }
+            : live
+              ? { label: 'Listening for you', tone: '#ffffff' }
+              : { label: 'Rehearsal mode', tone: '#ffffff' };
 
   return (
     <div className="solace-panel solace-ground relative overflow-hidden">
@@ -227,7 +229,9 @@ export function Session({
                 >
                   <span
                     className={`size-1.5 rounded-full ${
-                      thinking || mic.listening ? 'animate-pulse' : ''
+                      thinking || mic.preparing || mic.listening
+                        ? 'animate-pulse'
+                        : ''
                     }`}
                     style={{ background: stage.tone }}
                   />
@@ -467,7 +471,7 @@ export function Session({
                 onPointerCancel={endTalk}
                 title="Hold to talk, or hold the space bar"
                 className={`grid size-12 shrink-0 touch-none select-none place-items-center rounded-full transition ${
-                  mic.listening
+                  mic.preparing || mic.listening
                     ? 'solace-listening scale-110 bg-[#5cc9de] text-[#07222b]'
                     : 'bg-white text-[#0a2730] hover:scale-105'
                 }`}
@@ -483,9 +487,11 @@ export function Session({
               className="mx-auto mt-2.5 max-w-2xl text-center text-[12px] text-white/35"
               aria-live="polite"
             >
-              {mic.listening
-                ? 'Listening — release to send'
-                : 'Hold the mic, or hold the space bar, and speak'}
+              {mic.preparing
+                ? 'Preparing on-device speech recognition…'
+                : mic.listening
+                  ? 'Listening — release to send'
+                  : 'Hold the mic, or hold the space bar, and speak'}
             </p>
           ) : null}
         </div>
