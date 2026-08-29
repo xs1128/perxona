@@ -1,25 +1,31 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { respond, type CompanionReply } from "./brain";
-import { findAvatarPreset, findScenePreset } from "./defaults";
-import { buildOpeningLine } from "./prompt";
-import type { Prescription } from "./types";
-import { fetchMotions } from "@/lib/perxona/catalog";
-import { loadPresenterRuntime, motionMarkup } from "@/lib/perxona/presenter";
-import { usePresenter } from "@/lib/perxona/use-presenter";
+import { respond, type CompanionReply } from './brain';
+import { findAvatarPreset, findScenePreset } from './defaults';
+import { buildOpeningLine } from './prompt';
+import {
+  fillScript,
+  isScriptedPlan,
+  nextScriptBeat,
+  playedBeats,
+} from './script';
+import type { Prescription } from './types';
+import { fetchMotions } from '@/lib/perxona/catalog';
+import { loadPresenterRuntime, motionMarkup } from '@/lib/perxona/presenter';
+import { usePresenter } from '@/lib/perxona/use-presenter';
 import type {
   PresentationEmotion,
   PresentationIntensity,
-} from "@/lib/perxona/types";
+} from '@/lib/perxona/types';
 
-const REGION = "asia" as const;
+const REGION = 'asia' as const;
 
-const CONNECT_KEY = import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? "";
+const CONNECT_KEY = import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? '';
 
 export type SessionAlert = {
-  level: "distress" | "emergency";
+  level: 'distress' | 'emergency';
   detail: string;
 };
 
@@ -38,17 +44,23 @@ export type SessionAlert = {
 export function useCompanionSession(prescription: Prescription) {
   const { ref, state, actions } = usePresenter();
   const [live, setLive] = useState(false);
-  const [lastSaid, setLastSaid] = useState("");
+  const [lastSaid, setLastSaid] = useState('');
   const [thinking, setThinking] = useState(false);
   const [alert, setAlert] = useState<SessionAlert | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [messages, setMessages] = useState<
-    { id: string; role: "user" | "ai"; text: string }[]
+    { id: string; role: 'user' | 'ai'; text: string }[]
   >([]);
   const [performing, setPerforming] = useState<{
     emotion: PresentationEmotion;
     intensity: PresentationIntensity;
   } | null>(null);
+  /**
+   * The prescribed exercise the last turn ran, if any. Shown on the stage so
+   * the audience can see the clinician's own instruction firing on its trigger
+   * rather than being told that it did.
+   */
+  const [firedExercise, setFiredExercise] = useState<string | null>(null);
   /** Rehearsal has no `PERFORMANCE_START`, so the browser voice reports itself. */
   const [rehearsalSpeaking, setRehearsalSpeaking] = useState(false);
   /**
@@ -57,7 +69,7 @@ export function useCompanionSession(prescription: Prescription) {
    * flag on that silence, or the microphone would stay paused forever.
    */
   const rehearsalWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
+    null,
   );
 
   /*
@@ -81,14 +93,32 @@ export function useCompanionSession(prescription: Prescription) {
        */
       if (liveRef.current) actions.setListening(listening);
     },
-    [actions]
+    [actions],
   );
+
+  /**
+   * The line the presenter should say next, and what that beat is meant to
+   * prove. Derived from the same replay the brain uses, so the cue card can
+   * never disagree with the reply that will actually fire.
+   */
+  const scripted = isScriptedPlan(prescription);
+  const cue = useMemo(() => {
+    const beat = scripted ? nextScriptBeat(playedBeats(history)) : null;
+    if (!beat) return null;
+    // The card is read on stage, so it shows the names the plan actually uses.
+    return {
+      ...beat,
+      cue: fillScript(beat.cue, prescription),
+      say: fillScript(beat.say, prescription),
+      beat: fillScript(beat.beat, prescription),
+    };
+  }, [scripted, history, prescription]);
 
   const companion = prescription.avatar_persona.companions[0];
   const preset = companion ? findAvatarPreset(companion.presetId) : undefined;
-  const avatarId = companion?.avatarId ?? "";
+  const avatarId = companion?.avatarId ?? '';
   const sceneId =
-    findScenePreset(prescription.avatar_persona.sceneId)?.sceneId ?? "";
+    findScenePreset(prescription.avatar_persona.sceneId)?.sceneId ?? '';
 
   /**
    * Rehearsal voice. Tracked because the microphone has to ignore whatever the
@@ -116,7 +146,7 @@ export function useCompanionSession(prescription: Prescription) {
     // watchdog only fires when the utterance was never really started.
     rehearsalWatchdogRef.current = setTimeout(
       settle,
-      Math.max(4000, text.length * 90)
+      Math.max(4000, text.length * 90),
     );
   };
 
@@ -139,26 +169,27 @@ export function useCompanionSession(prescription: Prescription) {
 
   const say = async (reply: CompanionReply) => {
     setLastSaid(reply.say);
+    setFiredExercise(reply.firedExercise ?? null);
     setMessages((current) => [
       ...current,
-      { id: crypto.randomUUID(), role: "ai", text: reply.say },
+      { id: crypto.randomUUID(), role: 'ai', text: reply.say },
     ]);
 
-    if (reply.flag !== "none") {
+    if (reply.flag !== 'none') {
       const guardian =
         prescription.escalation_protocol.emergency_action.guardian_contact;
       setAlert({
         level: reply.flag,
         detail:
-          reply.flag === "emergency"
-            ? `${guardian || "Guardian"} notified`
-            : "Flagged on the clinician dashboard",
+          reply.flag === 'emergency'
+            ? `${guardian || 'Guardian'} notified`
+            : 'Flagged on the clinician dashboard',
       });
     }
 
     if (live) {
-      if (reply.intensity === "high") actions.setCameraAngle("halfbody");
-      else if (reply.intensity === "low") actions.setCameraAngle("fullbody");
+      if (reply.intensity === 'high') actions.setCameraAngle('halfbody');
+      else if (reply.intensity === 'low') actions.setCameraAngle('fullbody');
 
       setPerforming({ emotion: reply.emotion, intensity: reply.intensity });
       await actions.present(reply.say, {
@@ -194,11 +225,12 @@ export function useCompanionSession(prescription: Prescription) {
 
     const opening = buildOpeningLine(prescription);
     setLastSaid(opening);
-    setMessages([{ id: crypto.randomUUID(), role: "ai", text: opening }]);
-    setPerforming({ emotion: "caring", intensity: "neutral" });
+    setMessages([{ id: crypto.randomUUID(), role: 'ai', text: opening }]);
+    setFiredExercise(null);
+    setPerforming({ emotion: 'caring', intensity: 'neutral' });
 
     if (connected) {
-      actions.setCameraAngle("halfbody");
+      actions.setCameraAngle('halfbody');
 
       /*
        * Motion IDs are avatar-specific, so the greeting is resolved from this
@@ -209,10 +241,10 @@ export function useCompanionSession(prescription: Prescription) {
       try {
         const motions = await fetchMotions(
           { region: REGION, publishableKey: CONNECT_KEY },
-          avatarId
+          avatarId,
         );
         const greeting = motions.find(
-          (motion) => motion.category.toLowerCase() === "greeting"
+          (motion) => motion.category.toLowerCase() === 'greeting',
         );
         if (greeting) spoken = `${motionMarkup(greeting.id)} ${opening}`;
       } catch {
@@ -220,8 +252,8 @@ export function useCompanionSession(prescription: Prescription) {
       }
 
       await actions.present(spoken, {
-        emotion: "caring",
-        intensity: "neutral",
+        emotion: 'caring',
+        intensity: 'neutral',
       });
     } else {
       speakLocally(opening);
@@ -239,7 +271,7 @@ export function useCompanionSession(prescription: Prescription) {
       setHistory((current) => [...current, utterance]);
       setMessages((current) => [
         ...current,
-        { id: crypto.randomUUID(), role: "user", text: utterance },
+        { id: crypto.randomUUID(), role: 'user', text: utterance },
       ]);
       await say(reply);
     } finally {
@@ -257,8 +289,9 @@ export function useCompanionSession(prescription: Prescription) {
     setRehearsalSpeaking(false);
     if (live) actions.interrupt();
     setAlert(null);
-    setLastSaid("");
+    setLastSaid('');
     setPerforming(null);
+    setFiredExercise(null);
   };
 
   return {
@@ -272,7 +305,11 @@ export function useCompanionSession(prescription: Prescription) {
     companion,
     lastSaid,
     performing,
+    firedExercise,
     thinking,
+    /** True when the packaged demo plan is loaded and the script is armed. */
+    scripted,
+    cue,
     alert,
     dismissAlert: () => setAlert(null),
     setListening,
