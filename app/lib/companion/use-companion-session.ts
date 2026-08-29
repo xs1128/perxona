@@ -27,6 +27,12 @@ const CONNECT_KEY = import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? '';
 export type SessionAlert = {
   level: 'distress' | 'emergency';
   detail: string;
+  /** Who the plan says to reach on an emergency, shown on the red card. */
+  contact?: string;
+  /** The crisis line the plan named, offered next to the contact. */
+  resource?: string;
+  /** What the patient said that raised the flag, quoted for the clinician. */
+  reason?: string;
 };
 
 /**
@@ -64,6 +70,19 @@ export function useCompanionSession(prescription: Prescription) {
   /** Rehearsal has no `PERFORMANCE_START`, so the browser voice reports itself. */
   const [rehearsalSpeaking, setRehearsalSpeaking] = useState(false);
   /**
+   * True from the moment a turn is handed to the avatar until its voice picks
+   * the turn up.
+   *
+   * `state.speaking` only goes true on `PERFORMANCE_START`, which lands well
+   * after the reply text exists — a wide enough gap for the transcript to flash
+   * back on screen between the reply arriving and the avatar saying it. This
+   * latches at the start of the turn to close that window, and hands over to
+   * `speaking` as soon as the runtime confirms the voice has started.
+   */
+  const [delivering, setDelivering] = useState(false);
+  /** Frees the transcript if a turn is never spoken at all. */
+  const deliverWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
    * Chrome can swallow an utterance started in the same tick as `cancel()` —
    * neither `onend` nor `onerror` ever fires. The watchdog clears the speaking
    * flag on that silence, or the microphone would stay paused forever.
@@ -83,6 +102,26 @@ export function useCompanionSession(prescription: Prescription) {
   useEffect(() => {
     liveRef.current = live;
   }, [live]);
+
+  const speaking = live ? state.speaking : rehearsalSpeaking;
+
+  /*
+   * Once the voice is audible, `speaking` is the better signal and the latch
+   * has done its job. Releasing it here is what lets the transcript come back
+   * the moment the avatar stops rather than when the watchdog expires.
+   *
+   * The runtime reports speech as events, so this reacts to a transition, not
+   * to a value. React's documented answer to that is to adjust state during
+   * render; an effect would paint the intermediate state first.
+   */
+  const [spoke, setSpoke] = useState(false);
+  if (speaking !== spoke) {
+    setSpoke(speaking);
+    // The watchdog is left to expire on its own rather than cleared here:
+    // re-setting a flag that is already false is a no-op, and the next turn
+    // clears the pending timer before arming a new one.
+    if (speaking && delivering) setDelivering(false);
+  }
 
   const setListening = useCallback(
     (listening: boolean) => {
@@ -150,6 +189,20 @@ export function useCompanionSession(prescription: Prescription) {
     );
   };
 
+  /**
+   * Opens the delivery window for a turn about to be spoken. The watchdog is
+   * sized off the text so a `present()` that never reaches the speakers cannot
+   * leave the transcript hidden for the rest of the session.
+   */
+  const beginDelivery = (text: string) => {
+    if (deliverWatchdogRef.current) clearTimeout(deliverWatchdogRef.current);
+    setDelivering(true);
+    deliverWatchdogRef.current = setTimeout(
+      () => setDelivering(false),
+      Math.max(6000, text.length * 120),
+    );
+  };
+
   /** Warms the runtime while the clinician is still filling the form. */
   const preload = () => {
     if (CONNECT_KEY && avatarId && sceneId) {
@@ -168,6 +221,7 @@ export function useCompanionSession(prescription: Prescription) {
   };
 
   const say = async (reply: CompanionReply) => {
+    beginDelivery(reply.say);
     setLastSaid(reply.say);
     setFiredExercise(reply.firedExercise ?? null);
     setMessages((current) => [
@@ -176,14 +230,17 @@ export function useCompanionSession(prescription: Prescription) {
     ]);
 
     if (reply.flag !== 'none') {
-      const guardian =
-        prescription.escalation_protocol.emergency_action.guardian_contact;
+      const { guardian_contact: guardian, provide_resource: resource } =
+        prescription.escalation_protocol.emergency_action;
       setAlert({
         level: reply.flag,
         detail:
           reply.flag === 'emergency'
-            ? `${guardian || 'Guardian'} notified`
+            ? 'The companion broke character. A human has to take this turn.'
             : 'Flagged on the clinician dashboard',
+        contact: guardian || undefined,
+        resource: resource || undefined,
+        reason: reply.flagReason,
       });
     }
 
@@ -224,6 +281,7 @@ export function useCompanionSession(prescription: Prescription) {
     setLive(connected);
 
     const opening = buildOpeningLine(prescription);
+    beginDelivery(opening);
     setLastSaid(opening);
     setMessages([{ id: crypto.randomUUID(), role: 'ai', text: opening }]);
     setFiredExercise(null);
@@ -292,6 +350,11 @@ export function useCompanionSession(prescription: Prescription) {
     setLastSaid('');
     setPerforming(null);
     setFiredExercise(null);
+    if (deliverWatchdogRef.current) {
+      clearTimeout(deliverWatchdogRef.current);
+      deliverWatchdogRef.current = null;
+    }
+    setDelivering(false);
   };
 
   return {
@@ -299,7 +362,9 @@ export function useCompanionSession(prescription: Prescription) {
     state,
     live,
     /** True whichever voice is talking — the Presenter's or the browser's. */
-    speaking: live ? state.speaking : rehearsalSpeaking,
+    speaking,
+    /** True between a turn being handed over and its voice starting. */
+    delivering,
     messages,
     preset,
     companion,
