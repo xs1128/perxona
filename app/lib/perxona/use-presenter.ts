@@ -227,7 +227,21 @@ export function usePresenter() {
           'PERFORMANCE_STATE',
           (event) => {
             const next = readEnumDetail(event, PERFORMANCE_STATES);
-            if (next) patch({ performanceState: next });
+            if (!next) return;
+
+            /*
+             * `Talking`/`Idle` double as a second opinion on `speaking`. If
+             * `ALL_PERFORMANCE_FINISHED` is ever missed, `speaking` would stay
+             * true for the rest of the session — and the microphone, which
+             * pauses on it, would discard everything it hears from then on.
+             */
+            patch(
+              next === 'Talking'
+                ? { performanceState: next, speaking: true }
+                : next === 'Idle'
+                  ? { performanceState: next, speaking: false }
+                  : { performanceState: next },
+            );
           },
         ],
         [

@@ -48,6 +48,14 @@ export function useCompanionSession(prescription: Prescription) {
   } | null>(null);
   /** Rehearsal has no `PERFORMANCE_START`, so the browser voice reports itself. */
   const [rehearsalSpeaking, setRehearsalSpeaking] = useState(false);
+  /**
+   * Chrome can swallow an utterance started in the same tick as `cancel()` —
+   * neither `onend` nor `onerror` ever fires. The watchdog clears the speaking
+   * flag on that silence, or the microphone would stay paused forever.
+   */
+  const rehearsalWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   /*
    * Mirrors `live` for callbacks that must keep a stable identity. Without it
@@ -86,12 +94,27 @@ export function useCompanionSession(prescription: Prescription) {
   const speakLocally = (text: string) => {
     window.speechSynthesis.cancel();
 
+    const settle = () => {
+      if (rehearsalWatchdogRef.current) {
+        clearTimeout(rehearsalWatchdogRef.current);
+        rehearsalWatchdogRef.current = null;
+      }
+      setRehearsalSpeaking(false);
+    };
+
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onend = () => setRehearsalSpeaking(false);
-    utterance.onerror = () => setRehearsalSpeaking(false);
+    utterance.onend = settle;
+    utterance.onerror = settle;
 
     setRehearsalSpeaking(true);
     window.speechSynthesis.speak(utterance);
+
+    // ~90ms per character sits well above typical speech rate, so the
+    // watchdog only fires when the utterance was never really started.
+    rehearsalWatchdogRef.current = setTimeout(
+      settle,
+      Math.max(4000, text.length * 90),
+    );
   };
 
   /** Warms the runtime while the clinician is still filling the form. */
@@ -200,6 +223,10 @@ export function useCompanionSession(prescription: Prescription) {
 
   const end = () => {
     window.speechSynthesis.cancel();
+    if (rehearsalWatchdogRef.current) {
+      clearTimeout(rehearsalWatchdogRef.current);
+      rehearsalWatchdogRef.current = null;
+    }
     setRehearsalSpeaking(false);
     if (live) actions.interrupt();
     setAlert(null);

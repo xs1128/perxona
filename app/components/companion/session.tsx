@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Mic, PhoneOff, ShieldAlert, Square } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, ShieldAlert, Square } from 'lucide-react';
 
 import { AvatarPortrait } from './avatar-portrait';
 import type { CompanionSession } from '@/lib/companion/use-companion-session';
@@ -46,9 +46,10 @@ export function Session({
   const [heard, setHeard] = useState('');
 
   const mic = useSpeechRecognition({
-    // The avatar speaks out of the same speakers the microphone hears, so its
-    // own voice would come back as the patient's next utterance.
-    paused: thinking || speaking,
+    // Only the avatar's own voice has to be ignored — it plays out of the same
+    // speakers the microphone hears. While it thinks the stage is silent, so
+    // everything the mic picks up is the patient and must go through.
+    paused: speaking,
     onResult: (transcript) => {
       setHeard(transcript);
       void session.send(transcript);
@@ -76,20 +77,27 @@ export function Session({
   /* One word for what the avatar is doing, plus how it is doing it. */
   const stage = thinking
     ? { label: 'Thinking', tone: '#f5c563' }
-    : mic.listening
-      ? { label: 'Listening', tone: '#5cc9de' }
-      : state.phase === 'connecting'
-        ? {
-            label: state.progress
-              ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
-              : 'Connecting',
-            tone: '#f5c563',
-          }
-        : speaking
-          ? { label: 'Speaking', tone: '#5fcdc0' }
+    : speaking
+      ? { label: 'Speaking', tone: '#5fcdc0' }
+      : mic.listening
+        ? { label: 'Listening', tone: '#5cc9de' }
+        : state.phase === 'connecting'
+          ? {
+              label: state.progress
+                ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
+                : 'Connecting',
+              tone: '#f5c563',
+            }
           : live
             ? { label: 'Listening for you', tone: '#ffffff' }
             : { label: 'Rehearsal mode', tone: '#ffffff' };
+
+  /*
+   * The microphone is armed but discarding audio — never a mystery silence:
+   * the button drops its recording look so "I talk and nothing happens" is
+   * not what a paused mic looks like.
+   */
+  const micStandby = mic.listening && speaking;
 
   return (
     <div className="solace-panel solace-ground relative overflow-hidden">
@@ -152,7 +160,7 @@ export function Session({
                   aria-live="polite"
                 >
                   <span
-                    className={`size-1.5 rounded-full ${thinking || mic.listening ? 'animate-pulse' : ''}`}
+                    className={`size-1.5 rounded-full ${thinking || speaking || mic.listening ? 'animate-pulse' : ''}`}
                     style={{ background: stage.tone }}
                   />
                   {stage.label}
@@ -258,13 +266,28 @@ export function Session({
                 type="button"
                 onClick={() => (mic.listening ? mic.stop() : mic.start())}
                 className={`relative grid size-[76px] place-items-center rounded-full transition ${
-                  mic.listening
-                    ? 'solace-listening bg-[#5cc9de] text-[#07222b]'
-                    : 'bg-white text-[#0a2730] hover:scale-105'
+                  micStandby
+                    ? 'bg-white/20 text-white/55'
+                    : mic.listening
+                      ? 'solace-listening bg-[#5cc9de] text-[#07222b]'
+                      : 'bg-white text-[#0a2730] hover:scale-105'
                 }`}
-                aria-label={mic.listening ? 'Stop listening' : 'Talk'}
+                aria-label={
+                  mic.listening
+                    ? micStandby
+                      ? 'On standby — resumes when the companion finishes'
+                      : 'Stop listening'
+                    : 'Talk'
+                }
+                title={
+                  micStandby
+                    ? 'The microphone resumes when the companion finishes'
+                    : undefined
+                }
               >
-                {mic.listening ? (
+                {micStandby ? (
+                  <MicOff className="size-7" />
+                ) : mic.listening ? (
                   <Square className="size-6 fill-current" />
                 ) : (
                   <Mic className="size-7" />
