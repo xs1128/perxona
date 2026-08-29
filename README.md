@@ -12,3 +12,15 @@ Start with the [documentation index](docs/perxona-connect-kit/README.md).
 - [Motion Browser, Motion IDs, and custom VRM](docs/perxona-connect-kit/04-motion-browser-and-vrm.md)
 
 Research was last verified on 2026-08-29. Recheck the official sources before implementation because APIs, access restrictions, pricing, and preview behavior may change.
+
+## Minimal demo
+
+The runnable single-screen Presenter demo is in [`app/`](app/). It works immediately in browser-voice demo mode. To use a live Perxona Avatar, open **Setup** and enter a domain-restricted Publishable key plus the target Avatar, Scene, and optional Voice IDs.
+
+```bash
+cd app
+npm install
+npm run dev
+```
+
+The demo keeps the Publishable key in memory only. Do not use a Secret key in the browser.
