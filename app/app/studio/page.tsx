@@ -256,7 +256,10 @@ export default function Home() {
 
         {banner && !setupOpen && (
           <p className="mx-auto mb-3 flex w-full max-w-2xl items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive">
-            <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            <TriangleAlert
+              className="mt-px size-3.5 shrink-0"
+              aria-hidden="true"
+            />
             {banner}
           </p>
         )}

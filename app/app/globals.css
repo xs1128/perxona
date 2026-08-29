@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-outfit);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -162,7 +162,11 @@ body {
   border: 1px solid rgba(196, 181, 253, 0.24);
   border-radius: 38%;
   background:
-    radial-gradient(circle at 38% 28%, rgba(255, 255, 255, 0.2), transparent 25%),
+    radial-gradient(
+      circle at 38% 28%,
+      rgba(255, 255, 255, 0.2),
+      transparent 25%
+    ),
     linear-gradient(145deg, rgb(124 58 237), rgb(67 56 202));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
@@ -218,4 +222,276 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Solace — clinician console and companion stage                              */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  --solace-ink: #0a2730;
+  --solace-deep: #0d3542;
+  --solace-mid: #16576a;
+  --solace-teal: #2b7f96;
+  --solace-cyan: #5cc9de;
+  --solace-blue: #3b82f6;
+  --solace-paper: #eef2f4;
+  --solace-coral: #f2836b;
+  --solace-violet: #7c7ff0;
+  --solace-mint: #5fcdc0;
+  --solace-butter: #f5c563;
+}
+
+/*
+ * The three screens sit on one vertical rail. Advancing the stage translates
+ * the whole rail so the console appears to rise into view rather than replace
+ * the page, which is what the design calls for.
+ */
+.solace-rail {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.solace-rail-track {
+  height: 100%;
+  transition: transform 900ms cubic-bezier(0.76, 0, 0.24, 1);
+  will-change: transform;
+}
+
+.solace-panel {
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solace-rail-track {
+    transition-duration: 1ms;
+  }
+}
+
+/* Deep clinical ground, shared by every screen so the rail reads continuous. */
+.solace-ground {
+  background:
+    radial-gradient(
+      70% 60% at 72% 26%,
+      rgba(92, 201, 222, 0.34),
+      transparent 62%
+    ),
+    radial-gradient(
+      55% 55% at 92% 6%,
+      rgba(140, 230, 245, 0.24),
+      transparent 66%
+    ),
+    radial-gradient(
+      60% 60% at 14% 88%,
+      rgba(124, 127, 240, 0.26),
+      transparent 64%
+    ),
+    linear-gradient(
+      168deg,
+      #10465a 0%,
+      var(--solace-deep) 44%,
+      var(--solace-ink) 76%,
+      #061a21 100%
+    );
+}
+
+.solace-glass {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 70px -30px rgba(0, 0, 0, 0.75);
+}
+
+.solace-glass-soft {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+/* Selectable tile: avatar cards, scene cards, age bands. */
+.solace-tile {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  text-align: left;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.solace-tile:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.solace-tile[data-selected='true'] {
+  border-color: rgba(92, 201, 222, 0.75);
+  background: rgba(92, 201, 222, 0.14);
+  box-shadow: 0 0 0 1px rgba(92, 201, 222, 0.4);
+}
+
+/* Pill used for tones, anchors, boundaries, keywords. */
+.solace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12.5px;
+  line-height: 1.4;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.solace-chip:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.solace-chip[data-selected='true'] {
+  border-color: rgba(92, 201, 222, 0.6);
+  background: rgba(92, 201, 222, 0.18);
+  color: #dff6fb;
+}
+
+.solace-chip[data-variant='boundary'] {
+  border-color: rgba(242, 131, 107, 0.45);
+  background: rgba(242, 131, 107, 0.16);
+  color: #ffd9cf;
+}
+
+.solace-chip[data-variant='anchor'] {
+  border-color: rgba(95, 205, 192, 0.42);
+  background: rgba(95, 205, 192, 0.15);
+  color: #cdf5ef;
+}
+
+.solace-chip[data-variant='alert'] {
+  border-color: rgba(245, 197, 99, 0.45);
+  background: rgba(245, 197, 99, 0.15);
+  color: #fbeccb;
+}
+
+.solace-field {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 12px;
+  background: rgba(4, 22, 28, 0.45);
+  color: #eaf6f9;
+  font-size: 14px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.solace-field::placeholder {
+  color: rgba(226, 244, 249, 0.34);
+}
+
+.solace-field:focus {
+  border-color: rgba(92, 201, 222, 0.6);
+  background: rgba(4, 22, 28, 0.68);
+  outline: none;
+}
+
+.solace-label {
+  display: block;
+  margin-bottom: 7px;
+  color: rgba(226, 244, 249, 0.62);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* Hero and stage entrance. */
+@keyframes solace-rise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.solace-rise {
+  animation: solace-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes solace-pulse-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+.solace-listening::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  border: 2px solid rgba(92, 201, 222, 0.7);
+  border-radius: 999px;
+  animation: solace-pulse-ring 1.8s ease-out infinite;
+}
+
+@keyframes solace-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+.solace-breathe {
+  animation: solace-breathe 3.4s ease-in-out infinite;
+}
+
+.solace-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.solace-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: content-box;
+}
+
+/* Headings across the console and the landing page use the geometric face. */
+h1,
+h2,
+.solace-display {
+  font-family: var(--font-outfit), var(--font-geist-sans), sans-serif;
+}
+
+/* A brighter glass, for cards that must read as foreground on the hero. */
+.solace-glass-bright {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.solace-glass-bright:hover {
+  background: rgba(255, 255, 255, 0.17);
 }
