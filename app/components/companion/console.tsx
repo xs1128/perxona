@@ -1,22 +1,16 @@
-'use client';
+"use client";
 
-import { ArrowRight, ChevronLeft, Plus } from 'lucide-react';
+import { ArrowRight, ChevronLeft, Plus } from "lucide-react";
 
-import { AvatarPortrait, ScenePreview } from './avatar-portrait';
-import { ChipListInput, ChoiceRow, Field, SectionCard } from './controls';
-import {
-  AVATAR_PRESETS,
-  SCENE_PRESETS,
-  findAvatarPreset,
-} from '@/lib/companion/defaults';
-import { AGE_BANDS, GENDERS, type Prescription } from '@/lib/companion/types';
-
-const MAX_COMPANIONS = 2;
+import { ScenePreview } from "./avatar-portrait";
+import { ChipListInput, ChoiceRow, Field, SectionCard } from "./controls";
+import { SCENE_PRESETS } from "@/lib/companion/defaults";
+import { AGE_BANDS, GENDERS, type Prescription } from "@/lib/companion/types";
 
 const BOUNDARY_SUGGESTIONS = [
-  'Car accidents',
-  'The night her parents died',
-  'Hospital environments',
+  "Car accidents",
+  "The night her parents died",
+  "Hospital environments",
 ];
 
 /**
@@ -40,44 +34,9 @@ export function Console({
 
   const patch = <K extends keyof Prescription>(
     key: K,
-    value: Partial<Prescription[K]>,
+    value: Partial<Prescription[K]>
   ) => {
     onChange({ ...prescription, [key]: { ...prescription[key], ...value } });
-  };
-
-  const toggleCompanion = (presetId: string) => {
-    const preset = findAvatarPreset(presetId);
-    if (!preset) return;
-
-    if (persona.companions.some((slot) => slot.presetId === presetId)) {
-      patch('avatar_persona', {
-        companions: persona.companions.filter(
-          (slot) => slot.presetId !== presetId,
-        ),
-      });
-      return;
-    }
-
-    // A third selection replaces the oldest rather than refusing the click.
-    patch('avatar_persona', {
-      companions: [
-        ...persona.companions.slice(-(MAX_COMPANIONS - 1)),
-        {
-          presetId,
-          calledName: preset.suggestedNames[0] ?? preset.name,
-          avatarId: preset.avatarId,
-          voiceId: preset.voiceId,
-        },
-      ],
-    });
-  };
-
-  const renameCompanion = (presetId: string, calledName: string) => {
-    patch('avatar_persona', {
-      companions: persona.companions.map((slot) =>
-        slot.presetId === presetId ? { ...slot, calledName } : slot,
-      ),
-    });
   };
 
   const ready =
@@ -129,7 +88,7 @@ export function Console({
               <input
                 value={patient.name}
                 onChange={(event) =>
-                  patch('patient_profile', { name: event.target.value })
+                  patch("patient_profile", { name: event.target.value })
                 }
                 placeholder="Mia Hartono"
                 className="solace-field"
@@ -143,7 +102,7 @@ export function Console({
               <input
                 value={patient.preferred_name}
                 onChange={(event) =>
-                  patch('patient_profile', {
+                  patch("patient_profile", {
                     preferred_name: event.target.value,
                   })
                 }
@@ -156,7 +115,7 @@ export function Console({
               <ChoiceRow
                 options={GENDERS}
                 value={patient.gender}
-                onChange={(gender) => patch('patient_profile', { gender })}
+                onChange={(gender) => patch("patient_profile", { gender })}
               />
             </Field>
 
@@ -167,7 +126,7 @@ export function Console({
               <ChoiceRow
                 options={AGE_BANDS}
                 value={patient.age_band}
-                onChange={(age_band) => patch('patient_profile', { age_band })}
+                onChange={(age_band) => patch("patient_profile", { age_band })}
               />
             </Field>
           </div>
@@ -182,79 +141,75 @@ export function Console({
         >
           <div className="space-y-6">
             <Field
-              label={`Avatar · ${persona.companions.length} of 2`}
-              hint={
-                persona.companions.length > 1
-                  ? 'A Perxona scene holds one avatar, so the first one speaks in the session. The second is recorded on the plan.'
-                  : undefined
-              }
+              label="Customize your avatar"
+              hint="Change the companion's appearance, voice, and name."
             >
-              <div className="space-y-2">
-                {AVATAR_PRESETS.map((preset) => {
-                  const slot = persona.companions.find(
-                    (entry) => entry.presetId === preset.id,
-                  );
-
-                  return (
-                    <div
-                      key={preset.id}
-                      data-selected={Boolean(slot)}
-                      className="solace-tile overflow-hidden"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleCompanion(preset.id)}
-                        className="flex w-full items-center gap-3.5 p-3.5 text-left"
-                      >
-                        <AvatarPortrait
-                          gradient={preset.gradient}
-                          className="size-11"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[14.5px] font-medium text-white">
-                            {preset.name}
-                          </span>
-                          <span className="mt-0.5 block truncate text-[11.5px] text-white/45">
-                            {preset.blurb}
-                          </span>
-                        </span>
-                        {slot && persona.companions.length > 1 ? (
-                          <span className="shrink-0 rounded-full bg-white/12 px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-white/70 uppercase">
-                            {persona.companions[0]?.presetId === preset.id
-                              ? 'Speaks'
-                              : 'On plan'}
-                          </span>
-                        ) : null}
-
-                        <span
-                          className={
-                            slot
-                              ? 'grid size-5 shrink-0 place-items-center rounded-full bg-[#5cc9de] text-[11px] font-bold text-[#07222b]'
-                              : 'size-5 shrink-0 rounded-full border border-white/22'
-                          }
-                        >
-                          {slot ? '✓' : ''}
-                        </span>
-                      </button>
-
-                      {slot ? (
-                        <div className="border-t border-white/10 bg-black/18 p-3.5">
-                          <span className="solace-label">
-                            The child calls them
-                          </span>
-                          <input
-                            value={slot.calledName}
-                            onChange={(event) =>
-                              renameCompanion(preset.id, event.target.value)
-                            }
-                            placeholder="Papa, Mama, Kak Sara…"
-                            className="solace-field"
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+              <div className="space-y-3">
+                <div>
+                  <span className="solace-label mb-1.5 block">Avatar ID</span>
+                  <input
+                    value={persona.companions[0]?.avatarId ?? ""}
+                    onChange={(event) => {
+                      const current = persona.companions[0] ?? {
+                        presetId: "custom",
+                        calledName: "Companion",
+                        avatarId: "",
+                        voiceId: "",
+                      };
+                      patch("avatar_persona", {
+                        companions: [
+                          { ...current, avatarId: event.target.value },
+                        ],
+                      });
+                    }}
+                    placeholder="Enter Avatar ID"
+                    className="solace-field"
+                  />
+                </div>
+                <div>
+                  <span className="solace-label mb-1.5 block">Voice ID</span>
+                  <input
+                    value={persona.companions[0]?.voiceId ?? ""}
+                    onChange={(event) => {
+                      const current = persona.companions[0] ?? {
+                        presetId: "custom",
+                        calledName: "Companion",
+                        avatarId: "",
+                        voiceId: "",
+                      };
+                      patch("avatar_persona", {
+                        companions: [
+                          { ...current, voiceId: event.target.value },
+                        ],
+                      });
+                    }}
+                    placeholder="Enter Voice ID"
+                    className="solace-field"
+                  />
+                </div>
+                <div>
+                  <span className="solace-label mb-1.5 block">
+                    Companion Name
+                  </span>
+                  <input
+                    value={persona.companions[0]?.calledName ?? ""}
+                    onChange={(event) => {
+                      const current = persona.companions[0] ?? {
+                        presetId: "custom",
+                        calledName: "Companion",
+                        avatarId: "",
+                        voiceId: "",
+                      };
+                      patch("avatar_persona", {
+                        companions: [
+                          { ...current, calledName: event.target.value },
+                        ],
+                      });
+                    }}
+                    placeholder="What the child calls them (e.g., Kak Sara)"
+                    className="solace-field"
+                  />
+                </div>
               </div>
             </Field>
 
@@ -266,7 +221,7 @@ export function Console({
                     type="button"
                     data-selected={persona.sceneId === scene.id}
                     onClick={() =>
-                      patch('avatar_persona', { sceneId: scene.id })
+                      patch("avatar_persona", { sceneId: scene.id })
                     }
                     className="solace-tile w-[124px] p-2.5"
                   >
@@ -304,7 +259,7 @@ export function Console({
               <textarea
                 value={guardrails.therapeutic_goal}
                 onChange={(event) =>
-                  patch('clinical_guardrails', {
+                  patch("clinical_guardrails", {
                     therapeutic_goal: event.target.value,
                   })
                 }
@@ -321,7 +276,7 @@ export function Console({
               <ChipListInput
                 values={guardrails.hard_boundaries}
                 onChange={(hard_boundaries) =>
-                  patch('clinical_guardrails', { hard_boundaries })
+                  patch("clinical_guardrails", { hard_boundaries })
                 }
                 placeholder="Add a topic to block"
                 variant="boundary"

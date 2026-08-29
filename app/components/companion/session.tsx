@@ -1,23 +1,11 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { Mic, PhoneOff, ShieldAlert, Square } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
+import { Mic, PhoneOff, ShieldAlert, Square } from "lucide-react";
 
-import { AvatarPortrait } from './avatar-portrait';
-import type { CompanionSession } from '@/lib/companion/use-companion-session';
-import { useSpeechRecognition } from '@/lib/speech/use-speech-recognition';
-
-/** Taps offered to a patient who will not or cannot speak. */
-const QUICK_REPLIES = [
-  { emoji: '😔', label: "I can't sleep", text: "I can't sleep." },
-  {
-    emoji: '😰',
-    label: 'My heart is racing',
-    text: 'My heart is racing and I feel panic.',
-  },
-  { emoji: '💭', label: 'I miss them', text: 'I really miss them tonight.' },
-  { emoji: '🙂', label: "I'm okay", text: "I'm okay right now." },
-];
+import { AvatarPortrait } from "./avatar-portrait";
+import type { CompanionSession } from "@/lib/companion/use-companion-session";
+import { useSpeechRecognition } from "@/lib/speech/use-speech-recognition";
 
 export function Session({
   session,
@@ -43,7 +31,7 @@ export function Session({
     alert: alertState,
   } = session;
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [heard, setHeard] = useState('');
+  const [heard, setHeard] = useState("");
 
   const mic = useSpeechRecognition({
     // The avatar speaks out of the same speakers the microphone hears, so its
@@ -75,21 +63,21 @@ export function Session({
 
   /* One word for what the avatar is doing, plus how it is doing it. */
   const stage = thinking
-    ? { label: 'Thinking', tone: '#f5c563' }
+    ? { label: "Thinking", tone: "#f5c563" }
     : mic.listening
-      ? { label: 'Listening', tone: '#5cc9de' }
-      : state.phase === 'connecting'
-        ? {
-            label: state.progress
-              ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
-              : 'Connecting',
-            tone: '#f5c563',
-          }
-        : speaking
-          ? { label: 'Speaking', tone: '#5fcdc0' }
-          : live
-            ? { label: 'Listening for you', tone: '#ffffff' }
-            : { label: 'Rehearsal mode', tone: '#ffffff' };
+    ? { label: "Listening", tone: "#5cc9de" }
+    : state.phase === "connecting"
+    ? {
+        label: state.progress
+          ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
+          : "Connecting",
+        tone: "#f5c563",
+      }
+    : speaking
+    ? { label: "Speaking", tone: "#5fcdc0" }
+    : live
+    ? { label: "Listening for you", tone: "#ffffff" }
+    : { label: "Rehearsal mode", tone: "#ffffff" };
 
   return (
     <div className="solace-panel solace-ground relative overflow-hidden">
@@ -101,7 +89,7 @@ export function Session({
       */}
       <div
         className={`absolute inset-0 transition-opacity duration-500 ${
-          live ? 'opacity-100' : 'pointer-events-none opacity-0'
+          live ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
         {/* @ts-expect-error sv-presenter is provided by the Perxona runtime. */}
@@ -120,7 +108,7 @@ export function Session({
             <AvatarPortrait
               gradient={preset.gradient}
               className={`size-44 ring-1 ring-white/15 ${
-                speaking || thinking ? '' : 'solace-breathe'
+                speaking || thinking ? "" : "solace-breathe"
               }`}
             />
           </div>
@@ -138,7 +126,7 @@ export function Session({
             ) : null}
             <div>
               <p className="text-[15px] font-semibold text-white">
-                {companion?.calledName || 'Companion'}
+                {companion?.calledName || "Companion"}
               </p>
 
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -152,7 +140,9 @@ export function Session({
                   aria-live="polite"
                 >
                   <span
-                    className={`size-1.5 rounded-full ${thinking || mic.listening ? 'animate-pulse' : ''}`}
+                    className={`size-1.5 rounded-full ${
+                      thinking || mic.listening ? "animate-pulse" : ""
+                    }`}
                     style={{ background: stage.tone }}
                   />
                   {stage.label}
@@ -187,23 +177,23 @@ export function Session({
         {alertState ? (
           <div
             className={`mx-5 flex items-start gap-3 rounded-2xl border px-4 py-3 sm:mx-7 ${
-              alertState.level === 'emergency'
-                ? 'border-[#f2836b]/50 bg-[#f2836b]/16'
-                : 'border-[#f5c563]/40 bg-[#f5c563]/12'
+              alertState.level === "emergency"
+                ? "border-[#f2836b]/50 bg-[#f2836b]/16"
+                : "border-[#f5c563]/40 bg-[#f5c563]/12"
             }`}
           >
             <ShieldAlert
               className={`mt-0.5 size-4 shrink-0 ${
-                alertState.level === 'emergency'
-                  ? 'text-[#ffb9a6]'
-                  : 'text-[#f5c563]'
+                alertState.level === "emergency"
+                  ? "text-[#ffb9a6]"
+                  : "text-[#f5c563]"
               }`}
             />
             <div className="flex-1">
               <p className="text-[13px] font-semibold text-white">
-                {alertState.level === 'emergency'
-                  ? 'Emergency threshold crossed'
-                  : 'Distress flagged'}
+                {alertState.level === "emergency"
+                  ? "Emergency threshold crossed"
+                  : "Distress flagged"}
               </p>
               <p className="text-[12px] text-white/65">{alertState.detail}</p>
             </div>
@@ -217,65 +207,86 @@ export function Session({
           </div>
         ) : null}
 
-        <div className="flex-1" />
-
-        <div className="space-y-5 p-5 pb-8 sm:p-7 sm:pb-10">
-          {mic.interim || heard ? (
-            <p className="mx-auto flex max-w-2xl items-start justify-center gap-2 text-center text-[14.5px] leading-relaxed text-white/55">
-              <span className="mt-0.5 shrink-0 rounded-full border border-white/14 bg-white/8 px-2 py-0.5 text-[10.5px] tracking-wide text-white/45 uppercase">
-                You
-              </span>
-              <span className={mic.interim ? 'italic text-white/45' : ''}>
-                {mic.interim || heard}
-              </span>
-            </p>
-          ) : null}
-
-          {state.caption || lastSaid ? (
-            <p className="mx-auto max-w-2xl text-center text-[19px] leading-relaxed font-medium text-white/92 sm:text-[22px]">
-              {state.caption || lastSaid}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap justify-center gap-2">
-            {QUICK_REPLIES.map((quick) => (
-              <button
-                key={quick.label}
-                type="button"
-                disabled={thinking}
-                onClick={() => void session.send(quick.text)}
-                className="flex items-center gap-2 rounded-full border border-white/16 bg-white/8 px-4 py-2.5 text-[14px] text-white/85 backdrop-blur-md transition hover:border-white/35 hover:bg-white/14 disabled:opacity-40"
+        <div className="flex-1 overflow-y-auto p-5 sm:p-7 solace-scrollbar flex flex-col justify-end">
+          <div className="space-y-4 max-w-2xl mx-auto w-full">
+            {session.messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                }`}
               >
-                <span aria-hidden="true">{quick.emoji}</span>
-                {quick.label}
-              </button>
+                <div
+                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-[15px] ${
+                    msg.role === "user"
+                      ? "bg-[#5cc9de] text-[#07222b] rounded-br-sm"
+                      : "bg-white text-black rounded-bl-sm shadow-sm"
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              </div>
             ))}
+            {thinking || mic.interim ? (
+              <div
+                className={`flex ${
+                  mic.interim ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-[15px] ${
+                    mic.interim
+                      ? "bg-[#5cc9de]/70 text-[#07222b] rounded-br-sm italic"
+                      : "bg-white/80 text-black rounded-bl-sm animate-pulse shadow-sm"
+                  }`}
+                >
+                  {mic.interim ? mic.interim : "..."}
+                </div>
+              </div>
+            ) : null}
           </div>
+        </div>
 
-          <div className="flex justify-center">
+        <div className="p-5 pb-8 sm:p-7 sm:pb-10">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const input = form.elements.namedItem("text") as HTMLInputElement;
+              const val = input.value;
+              if (val && !thinking) {
+                void session.send(val);
+                input.value = "";
+              }
+            }}
+            className="flex items-center gap-2 max-w-2xl mx-auto"
+          >
+            <input
+              name="text"
+              type="text"
+              placeholder="Type a message..."
+              disabled={thinking}
+              className="flex-1 rounded-full border border-white/16 bg-white/10 px-5 py-3.5 text-[15px] text-white placeholder-white/40 focus:border-white/30 focus:outline-none focus:ring-1 focus:ring-white/30 disabled:opacity-50"
+            />
             {mic.supported ? (
               <button
                 type="button"
                 onClick={() => (mic.listening ? mic.stop() : mic.start())}
-                className={`relative grid size-[76px] place-items-center rounded-full transition ${
+                className={`grid size-12 shrink-0 place-items-center rounded-full transition ${
                   mic.listening
-                    ? 'solace-listening bg-[#5cc9de] text-[#07222b]'
-                    : 'bg-white text-[#0a2730] hover:scale-105'
+                    ? "solace-listening bg-[#5cc9de] text-[#07222b]"
+                    : "bg-white text-[#0a2730] hover:scale-105"
                 }`}
-                aria-label={mic.listening ? 'Stop listening' : 'Talk'}
+                aria-label={mic.listening ? "Stop listening" : "Talk"}
               >
                 {mic.listening ? (
-                  <Square className="size-6 fill-current" />
+                  <Square className="size-4 fill-current" />
                 ) : (
-                  <Mic className="size-7" />
+                  <Mic className="size-5" />
                 )}
               </button>
-            ) : (
-              <p className="text-[12.5px] text-white/45">
-                Voice input needs Chrome or Safari — use the buttons above.
-              </p>
-            )}
-          </div>
+            ) : null}
+          </form>
         </div>
       </div>
 

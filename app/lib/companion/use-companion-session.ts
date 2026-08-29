@@ -1,25 +1,25 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { respond, type CompanionReply } from './brain';
-import { findAvatarPreset, findScenePreset } from './defaults';
-import { buildOpeningLine } from './prompt';
-import type { Prescription } from './types';
-import { fetchMotions } from '@/lib/perxona/catalog';
-import { loadPresenterRuntime, motionMarkup } from '@/lib/perxona/presenter';
-import { usePresenter } from '@/lib/perxona/use-presenter';
+import { respond, type CompanionReply } from "./brain";
+import { findAvatarPreset, findScenePreset } from "./defaults";
+import { buildOpeningLine } from "./prompt";
+import type { Prescription } from "./types";
+import { fetchMotions } from "@/lib/perxona/catalog";
+import { loadPresenterRuntime, motionMarkup } from "@/lib/perxona/presenter";
+import { usePresenter } from "@/lib/perxona/use-presenter";
 import type {
   PresentationEmotion,
   PresentationIntensity,
-} from '@/lib/perxona/types';
+} from "@/lib/perxona/types";
 
-const REGION = 'asia' as const;
+const REGION = "asia" as const;
 
-const CONNECT_KEY = import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? '';
+const CONNECT_KEY = import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? "";
 
 export type SessionAlert = {
-  level: 'distress' | 'emergency';
+  level: "distress" | "emergency";
   detail: string;
 };
 
@@ -38,16 +38,27 @@ export type SessionAlert = {
 export function useCompanionSession(prescription: Prescription) {
   const { ref, state, actions } = usePresenter();
   const [live, setLive] = useState(false);
-  const [lastSaid, setLastSaid] = useState('');
+  const [lastSaid, setLastSaid] = useState("");
   const [thinking, setThinking] = useState(false);
   const [alert, setAlert] = useState<SessionAlert | null>(null);
   const [history, setHistory] = useState<string[]>([]);
+  const [messages, setMessages] = useState<
+    { id: string; role: "user" | "ai"; text: string }[]
+  >([]);
   const [performing, setPerforming] = useState<{
     emotion: PresentationEmotion;
     intensity: PresentationIntensity;
   } | null>(null);
   /** Rehearsal has no `PERFORMANCE_START`, so the browser voice reports itself. */
   const [rehearsalSpeaking, setRehearsalSpeaking] = useState(false);
+  /**
+   * Chrome can swallow an utterance started in the same tick as `cancel()` —
+   * neither `onend` nor `onerror` ever fires. The watchdog clears the speaking
+   * flag on that silence, or the microphone would stay paused forever.
+   */
+  const rehearsalWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   /*
    * Mirrors `live` for callbacks that must keep a stable identity. Without it
@@ -70,14 +81,14 @@ export function useCompanionSession(prescription: Prescription) {
        */
       if (liveRef.current) actions.setListening(listening);
     },
-    [actions],
+    [actions]
   );
 
   const companion = prescription.avatar_persona.companions[0];
   const preset = companion ? findAvatarPreset(companion.presetId) : undefined;
-  const avatarId = companion?.avatarId ?? '';
+  const avatarId = companion?.avatarId ?? "";
   const sceneId =
-    findScenePreset(prescription.avatar_persona.sceneId)?.sceneId ?? '';
+    findScenePreset(prescription.avatar_persona.sceneId)?.sceneId ?? "";
 
   /**
    * Rehearsal voice. Tracked because the microphone has to ignore whatever the
@@ -86,39 +97,68 @@ export function useCompanionSession(prescription: Prescription) {
   const speakLocally = (text: string) => {
     window.speechSynthesis.cancel();
 
+    const settle = () => {
+      if (rehearsalWatchdogRef.current) {
+        clearTimeout(rehearsalWatchdogRef.current);
+        rehearsalWatchdogRef.current = null;
+      }
+      setRehearsalSpeaking(false);
+    };
+
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onend = () => setRehearsalSpeaking(false);
-    utterance.onerror = () => setRehearsalSpeaking(false);
+    utterance.onend = settle;
+    utterance.onerror = settle;
 
     setRehearsalSpeaking(true);
     window.speechSynthesis.speak(utterance);
+
+    // ~90ms per character sits well above typical speech rate, so the
+    // watchdog only fires when the utterance was never really started.
+    rehearsalWatchdogRef.current = setTimeout(
+      settle,
+      Math.max(4000, text.length * 90)
+    );
   };
 
   /** Warms the runtime while the clinician is still filling the form. */
   const preload = () => {
-    void loadPresenterRuntime(REGION).catch(() => {
-      // A failed preload is not fatal; `begin()` retries and reports.
-    });
+    if (CONNECT_KEY && avatarId && sceneId) {
+      // Calling connect here initializes the runtime and starts downloading the heavy 3D assets early.
+      // Audio playback won't be resumed until the user clicks 'Begin Session'.
+      void actions.connect(REGION, CONNECT_KEY, {
+        avatarId,
+        sceneId,
+        voiceId: companion?.voiceId || undefined,
+      });
+    } else {
+      void loadPresenterRuntime(REGION).catch(() => {
+        // A failed preload is not fatal; `begin()` retries and reports.
+      });
+    }
   };
 
   const say = async (reply: CompanionReply) => {
     setLastSaid(reply.say);
+    setMessages((current) => [
+      ...current,
+      { id: crypto.randomUUID(), role: "ai", text: reply.say },
+    ]);
 
-    if (reply.flag !== 'none') {
+    if (reply.flag !== "none") {
       const guardian =
         prescription.escalation_protocol.emergency_action.guardian_contact;
       setAlert({
         level: reply.flag,
         detail:
-          reply.flag === 'emergency'
-            ? `${guardian || 'Guardian'} notified`
-            : 'Flagged on the clinician dashboard',
+          reply.flag === "emergency"
+            ? `${guardian || "Guardian"} notified`
+            : "Flagged on the clinician dashboard",
       });
     }
 
     if (live) {
-      if (reply.intensity === 'high') actions.setCameraAngle('halfbody');
-      else if (reply.intensity === 'low') actions.setCameraAngle('fullbody');
+      if (reply.intensity === "high") actions.setCameraAngle("halfbody");
+      else if (reply.intensity === "low") actions.setCameraAngle("fullbody");
 
       setPerforming({ emotion: reply.emotion, intensity: reply.intensity });
       await actions.present(reply.say, {
@@ -136,6 +176,11 @@ export function useCompanionSession(prescription: Prescription) {
 
   /** Must be called directly from the user's click. */
   const begin = async () => {
+    // Must run inside the user gesture that triggered the session.
+    if (CONNECT_KEY && avatarId && sceneId) {
+      await actions.resumeAudio();
+    }
+
     const connected =
       CONNECT_KEY && avatarId && sceneId
         ? await actions.connect(REGION, CONNECT_KEY, {
@@ -149,10 +194,11 @@ export function useCompanionSession(prescription: Prescription) {
 
     const opening = buildOpeningLine(prescription);
     setLastSaid(opening);
-    setPerforming({ emotion: 'caring', intensity: 'neutral' });
+    setMessages([{ id: crypto.randomUUID(), role: "ai", text: opening }]);
+    setPerforming({ emotion: "caring", intensity: "neutral" });
 
     if (connected) {
-      actions.setCameraAngle('halfbody');
+      actions.setCameraAngle("halfbody");
 
       /*
        * Motion IDs are avatar-specific, so the greeting is resolved from this
@@ -163,10 +209,10 @@ export function useCompanionSession(prescription: Prescription) {
       try {
         const motions = await fetchMotions(
           { region: REGION, publishableKey: CONNECT_KEY },
-          avatarId,
+          avatarId
         );
         const greeting = motions.find(
-          (motion) => motion.category.toLowerCase() === 'greeting',
+          (motion) => motion.category.toLowerCase() === "greeting"
         );
         if (greeting) spoken = `${motionMarkup(greeting.id)} ${opening}`;
       } catch {
@@ -174,8 +220,8 @@ export function useCompanionSession(prescription: Prescription) {
       }
 
       await actions.present(spoken, {
-        emotion: 'caring',
-        intensity: 'neutral',
+        emotion: "caring",
+        intensity: "neutral",
       });
     } else {
       speakLocally(opening);
@@ -191,6 +237,10 @@ export function useCompanionSession(prescription: Prescription) {
     try {
       const reply = await respond(prescription, utterance, history);
       setHistory((current) => [...current, utterance]);
+      setMessages((current) => [
+        ...current,
+        { id: crypto.randomUUID(), role: "user", text: utterance },
+      ]);
       await say(reply);
     } finally {
       setThinking(false);
@@ -200,10 +250,14 @@ export function useCompanionSession(prescription: Prescription) {
 
   const end = () => {
     window.speechSynthesis.cancel();
+    if (rehearsalWatchdogRef.current) {
+      clearTimeout(rehearsalWatchdogRef.current);
+      rehearsalWatchdogRef.current = null;
+    }
     setRehearsalSpeaking(false);
     if (live) actions.interrupt();
     setAlert(null);
-    setLastSaid('');
+    setLastSaid("");
     setPerforming(null);
   };
 
@@ -213,6 +267,7 @@ export function useCompanionSession(prescription: Prescription) {
     live,
     /** True whichever voice is talking — the Presenter's or the browser's. */
     speaking: live ? state.speaking : rehearsalSpeaking,
+    messages,
     preset,
     companion,
     lastSaid,
