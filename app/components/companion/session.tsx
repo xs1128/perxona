@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Mic, PhoneOff, ShieldAlert, Square } from 'lucide-react';
 
 import { AvatarPortrait } from './avatar-portrait';
@@ -34,16 +34,25 @@ export function Session({
     state,
     preset,
     companion,
+    speaking,
     thinking,
     lastSaid,
+    performing,
     setListening,
     dismissAlert,
     alert: alertState,
   } = session;
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [heard, setHeard] = useState('');
 
   const mic = useSpeechRecognition({
-    onResult: (transcript) => void session.send(transcript),
+    // The avatar speaks out of the same speakers the microphone hears, so its
+    // own voice would come back as the patient's next utterance.
+    paused: thinking || speaking,
+    onResult: (transcript) => {
+      setHeard(transcript);
+      void session.send(transcript);
+    },
   });
 
   // Both companions look up while the microphone is open.
@@ -64,22 +73,37 @@ export function Session({
     holdTimer.current = null;
   };
 
-  const status = thinking
-    ? 'Thinking…'
+  /* One word for what the avatar is doing, plus how it is doing it. */
+  const stage = thinking
+    ? { label: 'Thinking', tone: '#f5c563' }
     : mic.listening
-      ? 'Listening…'
+      ? { label: 'Listening', tone: '#5cc9de' }
       : state.phase === 'connecting'
-        ? state.progress
-          ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
-          : 'Connecting…'
-        : live
-          ? state.performanceState
-          : 'Rehearsal mode';
+        ? {
+            label: state.progress
+              ? `Loading ${state.progress.asset} ${state.progress.percentage}%`
+              : 'Connecting',
+            tone: '#f5c563',
+          }
+        : speaking
+          ? { label: 'Speaking', tone: '#5fcdc0' }
+          : live
+            ? { label: 'Listening for you', tone: '#ffffff' }
+            : { label: 'Rehearsal mode', tone: '#ffffff' };
 
   return (
     <div className="solace-panel solace-ground relative overflow-hidden">
-      {/* The Perxona stage. Always mounted so `begin()` has a live element. */}
-      <div className={`absolute inset-0 ${live ? 'block' : 'hidden'}`}>
+      {/*
+        The Perxona stage. Always mounted so `begin()` has a live element, and
+        never `display: none` — a hidden element gives the renderer a 0x0
+        canvas, and the Presenter can stall at `Initializing` rather than
+        reaching `Ready`. It fades in instead.
+      */}
+      <div
+        className={`absolute inset-0 transition-opacity duration-500 ${
+          live ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      >
         {/* @ts-expect-error sv-presenter is provided by the Perxona runtime. */}
         <sv-presenter ref={ref} className="block h-full w-full" />
       </div>
@@ -96,7 +120,7 @@ export function Session({
             <AvatarPortrait
               gradient={preset.gradient}
               className={`size-44 ring-1 ring-white/15 ${
-                state.speaking || thinking ? '' : 'solace-breathe'
+                speaking || thinking ? '' : 'solace-breathe'
               }`}
             />
           </div>
@@ -116,9 +140,35 @@ export function Session({
               <p className="text-[15px] font-semibold text-white">
                 {companion?.calledName || 'Companion'}
               </p>
-              <p className="text-[12px] text-white/50" aria-live="polite">
-                {status}
-              </p>
+
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                  style={{
+                    borderColor: `${stage.tone}55`,
+                    background: `${stage.tone}1f`,
+                    color: stage.tone,
+                  }}
+                  aria-live="polite"
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${thinking || mic.listening ? 'animate-pulse' : ''}`}
+                    style={{ background: stage.tone }}
+                  />
+                  {stage.label}
+                </span>
+
+                {/*
+                  The emotion the care plan asked for, shown as it performs.
+                  This is the visible link between the prescription and what
+                  the avatar's face is doing.
+                */}
+                {performing ? (
+                  <span className="rounded-full border border-white/14 bg-white/8 px-2.5 py-1 font-mono text-[11px] text-white/70">
+                    {performing.emotion} · {performing.intensity}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -170,6 +220,17 @@ export function Session({
         <div className="flex-1" />
 
         <div className="space-y-5 p-5 pb-8 sm:p-7 sm:pb-10">
+          {mic.interim || heard ? (
+            <p className="mx-auto flex max-w-2xl items-start justify-center gap-2 text-center text-[14.5px] leading-relaxed text-white/55">
+              <span className="mt-0.5 shrink-0 rounded-full border border-white/14 bg-white/8 px-2 py-0.5 text-[10.5px] tracking-wide text-white/45 uppercase">
+                You
+              </span>
+              <span className={mic.interim ? 'italic text-white/45' : ''}>
+                {mic.interim || heard}
+              </span>
+            </p>
+          ) : null}
+
           {state.caption || lastSaid ? (
             <p className="mx-auto max-w-2xl text-center text-[19px] leading-relaxed font-medium text-white/92 sm:text-[22px]">
               {state.caption || lastSaid}
@@ -218,9 +279,9 @@ export function Session({
         </div>
       </div>
 
-      {state.error ? (
+      {state.error || mic.error ? (
         <p className="absolute inset-x-5 bottom-2 mx-auto max-w-xl rounded-xl border border-[#f2836b]/35 bg-[#f2836b]/12 px-3.5 py-2 text-center text-[12px] leading-snug text-[#ffd9cf]">
-          {state.error}
+          {state.error ?? mic.error}
         </p>
       ) : null}
     </div>

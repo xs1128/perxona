@@ -1,13 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { respond, type CompanionReply } from './brain';
 import { findAvatarPreset, findScenePreset } from './defaults';
 import { buildOpeningLine } from './prompt';
 import type { Prescription } from './types';
-import { loadPresenterRuntime } from '@/lib/perxona/presenter';
+import { fetchMotions } from '@/lib/perxona/catalog';
+import { loadPresenterRuntime, motionMarkup } from '@/lib/perxona/presenter';
 import { usePresenter } from '@/lib/perxona/use-presenter';
+import type {
+  PresentationEmotion,
+  PresentationIntensity,
+} from '@/lib/perxona/types';
 
 const REGION = 'asia' as const;
 
@@ -37,12 +42,57 @@ export function useCompanionSession(prescription: Prescription) {
   const [thinking, setThinking] = useState(false);
   const [alert, setAlert] = useState<SessionAlert | null>(null);
   const [history, setHistory] = useState<string[]>([]);
+  const [performing, setPerforming] = useState<{
+    emotion: PresentationEmotion;
+    intensity: PresentationIntensity;
+  } | null>(null);
+  /** Rehearsal has no `PERFORMANCE_START`, so the browser voice reports itself. */
+  const [rehearsalSpeaking, setRehearsalSpeaking] = useState(false);
+
+  /*
+   * Mirrors `live` for callbacks that must keep a stable identity. Without it
+   * `setListening` is a new function every render, its effect in `Session`
+   * re-runs, `actions.setListening` patches Presenter state, and the render
+   * loop never settles.
+   */
+  const liveRef = useRef(live);
+
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
+
+  const setListening = useCallback(
+    (listening: boolean) => {
+      /*
+       * Presenter methods only exist once the runtime has upgraded the element,
+       * and optional chaining guards a null element, not a missing method. Every
+       * call is therefore gated on a live connection.
+       */
+      if (liveRef.current) actions.setListening(listening);
+    },
+    [actions],
+  );
 
   const companion = prescription.avatar_persona.companions[0];
   const preset = companion ? findAvatarPreset(companion.presetId) : undefined;
   const avatarId = companion?.avatarId ?? '';
   const sceneId =
     findScenePreset(prescription.avatar_persona.sceneId)?.sceneId ?? '';
+
+  /**
+   * Rehearsal voice. Tracked because the microphone has to ignore whatever the
+   * speakers are playing, or the companion transcribes itself.
+   */
+  const speakLocally = (text: string) => {
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onend = () => setRehearsalSpeaking(false);
+    utterance.onerror = () => setRehearsalSpeaking(false);
+
+    setRehearsalSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   /** Warms the runtime while the clinician is still filling the form. */
   const preload = () => {
@@ -67,6 +117,10 @@ export function useCompanionSession(prescription: Prescription) {
     }
 
     if (live) {
+      if (reply.intensity === 'high') actions.setCameraAngle('halfbody');
+      else if (reply.intensity === 'low') actions.setCameraAngle('fullbody');
+
+      setPerforming({ emotion: reply.emotion, intensity: reply.intensity });
       await actions.present(reply.say, {
         emotion: reply.emotion,
         intensity: reply.intensity,
@@ -74,9 +128,10 @@ export function useCompanionSession(prescription: Prescription) {
       return;
     }
 
+    setPerforming({ emotion: reply.emotion, intensity: reply.intensity });
+
     // Rehearsal: the browser voice stands in when no catalog IDs are set.
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(reply.say));
+    speakLocally(reply.say);
   };
 
   /** Must be called directly from the user's click. */
@@ -91,19 +146,39 @@ export function useCompanionSession(prescription: Prescription) {
         : false;
 
     setLive(connected);
-    if (connected) actions.setCameraAngle('halfbody');
 
     const opening = buildOpeningLine(prescription);
     setLastSaid(opening);
+    setPerforming({ emotion: 'caring', intensity: 'neutral' });
 
     if (connected) {
-      await actions.present(opening, {
+      actions.setCameraAngle('halfbody');
+
+      /*
+       * Motion IDs are avatar-specific, so the greeting is resolved from this
+       * Avatar's own catalog at runtime rather than hardcoded. An Avatar with
+       * no greeting motion simply speaks without one.
+       */
+      let spoken = opening;
+      try {
+        const motions = await fetchMotions(
+          { region: REGION, publishableKey: CONNECT_KEY },
+          avatarId,
+        );
+        const greeting = motions.find(
+          (motion) => motion.category.toLowerCase() === 'greeting',
+        );
+        if (greeting) spoken = `${motionMarkup(greeting.id)} ${opening}`;
+      } catch {
+        // Motion lookup is decorative; never block the opening line on it.
+      }
+
+      await actions.present(spoken, {
         emotion: 'caring',
         intensity: 'neutral',
       });
     } else {
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(opening));
+      speakLocally(opening);
     }
   };
 
@@ -125,29 +200,27 @@ export function useCompanionSession(prescription: Prescription) {
 
   const end = () => {
     window.speechSynthesis.cancel();
+    setRehearsalSpeaking(false);
     if (live) actions.interrupt();
     setAlert(null);
     setLastSaid('');
+    setPerforming(null);
   };
 
   return {
     ref,
     state,
     live,
+    /** True whichever voice is talking — the Presenter's or the browser's. */
+    speaking: live ? state.speaking : rehearsalSpeaking,
     preset,
     companion,
     lastSaid,
+    performing,
     thinking,
     alert,
     dismissAlert: () => setAlert(null),
-    /*
-     * Presenter methods only exist once the runtime has upgraded the element,
-     * and optional chaining guards a null element, not a missing method. Every
-     * call is therefore gated on a live connection.
-     */
-    setListening: (listening: boolean) => {
-      if (live) actions.setListening(listening);
-    },
+    setListening,
     preload,
     begin,
     send,
