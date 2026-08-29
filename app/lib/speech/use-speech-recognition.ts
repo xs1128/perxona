@@ -149,6 +149,16 @@ export function useSpeechRecognition({
    * outlives any single session, so `onend` can restart transparently.
    */
   const wantedRef = useRef(false);
+  /*
+   * Whatever the engine has heard but not yet promoted to a final result.
+   *
+   * Releasing the control has to send something even when no final ever
+   * arrives. `stop()` is specified to return a result from the audio captured
+   * so far, but the on-device recognizer often just ends the session, and a
+   * push-to-talk turn is short enough to hit that on nearly every hold — the
+   * words show up as interim text and are then dropped.
+   */
+  const pendingRef = useRef('');
   const restartsRef = useRef(0);
   const networkRetriesRef = useRef(0);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -241,12 +251,15 @@ export function useSpeechRecognition({
       }
 
       setInterim(pending);
+      pendingRef.current = pending;
 
       if (finalText.trim()) {
         restartsRef.current = 0;
         networkRetriesRef.current = 0;
         setError(null);
         setInterim('');
+        // The final supersedes the buffer; anything after it is a new phrase.
+        pendingRef.current = '';
         setTranscript(finalText.trim());
         onResultRef.current?.(finalText.trim());
       }
@@ -277,9 +290,21 @@ export function useSpeechRecognition({
       setInterim('');
 
       if (!wantedRef.current) {
+        // The control was released. Send what was heard rather than losing it
+        // because the engine never promoted it to a final result.
+        const tail = pendingRef.current.trim();
+        pendingRef.current = '';
         setListening(false);
+        if (tail && !pausedRef.current) {
+          setTranscript(tail);
+          onResultRef.current?.(tail);
+        }
         return;
       }
+
+      // Restarting mid-hold: this fragment belongs to the session that just
+      // ended, and emitting it later would land out of order behind the next.
+      pendingRef.current = '';
 
       /*
        * Guard against a session that ends the instant it starts — without a
@@ -326,6 +351,7 @@ export function useSpeechRecognition({
   const start = useCallback(() => {
     if (wantedRef.current) return;
     wantedRef.current = true;
+    pendingRef.current = '';
     restartsRef.current = 0;
     networkRetriesRef.current = 0;
     setError(null);

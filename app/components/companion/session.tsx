@@ -35,6 +35,7 @@ export function Session({
     performing,
     firedExercise,
     breathing,
+    clearBreathing,
     scripted,
     cue,
     setListening,
@@ -424,11 +425,11 @@ export function Session({
         */}
         {breathingActive ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-32 z-20 flex justify-center sm:bottom-36">
-            <BreathingGuide pattern={breathing} />
+            <BreathingGuide onComplete={clearBreathing} />
           </div>
         ) : null}
 
-        {scripted && cueOpen ? (
+        {scripted && cueOpen && !breathingActive ? (
           <div className="mx-auto w-full max-w-2xl px-5 sm:px-7">
             <div className="rounded-2xl border border-white/14 bg-black/55 px-4 py-3 backdrop-blur">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/40">

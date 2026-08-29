@@ -383,6 +383,8 @@ export function useCompanionSession(prescription: Prescription) {
     performing,
     firedExercise,
     breathing,
+    /** Called by the guide when its round is over. */
+    clearBreathing: () => setBreathing(null),
     thinking,
     /** True when the packaged demo plan is loaded and the script is armed. */
     scripted,
