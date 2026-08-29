@@ -73,6 +73,12 @@ const READY_TIMEOUT_MS = 60_000;
 /** How long a later `present()` waits if readiness lapsed mid-session. */
 const PRESENT_READY_TIMEOUT_MS = 15_000;
 
+/**
+ * How long a re-target waits for React to drop the old `<sv-presenter>` and
+ * attach its replacement.
+ */
+const REMOUNT_TIMEOUT_MS = 10_000;
+
 type ReadyGate = { promise: Promise<void>; open: () => void };
 
 function createReadyGate(): ReadyGate {
@@ -99,6 +105,17 @@ async function waitForGate(gate: ReadyGate, timeoutMs: number) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Identity of a Presenter target.
+ *
+ * `initializeWithConnectKey()` binds an element to one Avatar, Scene, and Voice
+ * for the element's lifetime, so this is what `connect()` compares to decide
+ * whether it is joining the live session or replacing it.
+ */
+function targetKey(target: PresentationTarget) {
+  return `${target.avatarId}|${target.sceneId}|${target.voiceId ?? ""}`;
 }
 
 /*
@@ -169,9 +186,42 @@ export function usePresenter() {
   const elementRef = useRef<PresenterElement | null>(null);
   const [state, setState] = useState<PresenterState>(INITIAL_STATE);
 
+  /**
+   * Bumped to make React throw the `<sv-presenter>` away and mount a fresh one.
+   *
+   * The runtime has no way to re-target a live element, so switching Avatar or
+   * Scene means replacing it. Consumers MUST pass this as the element's `key`
+   * or `connect()` can never change the target.
+   */
+  const [instanceKey, setInstanceKey] = useState(0);
+
   // Opened by `PRESENTER_STATUS: Ready`; awaited by everything that performs.
   const gateRef = useRef<ReadyGate | null>(null);
   const readyRef = useRef(false);
+
+  /** `targetKey()` of whatever the mounted element was initialized with. */
+  const activeTargetRef = useRef<string | null>(null);
+
+  /**
+   * Whether `initializeWithConnectKey()` has been called on the element now
+   * mounted. An element may only be initialized once, so this — not the active
+   * target — is what decides whether the next attempt needs a fresh element.
+   */
+  const initializedRef = useRef(false);
+
+  /** Opened by the ref callback once a replacement element is attached. */
+  const mountGateRef = useRef<ReadyGate | null>(null);
+
+  /** Identifies the newest `connect()`; older ones retire when they see it. */
+  const connectSeqRef = useRef(0);
+
+  /**
+   * The `connect()` currently in flight. A new target aborts it and waits for
+   * it to retire, so only one attempt ever owns the element at a time.
+   */
+  const runRef = useRef<{ done: Promise<boolean>; abort: () => void } | null>(
+    null
+  );
 
   const patch = useCallback((next: Partial<PresenterState>) => {
     setState((current) => ({ ...current, ...next }));
@@ -192,6 +242,9 @@ export function usePresenter() {
       elementRef.current = element;
       if (!element) return;
 
+      // A re-target parks here until its replacement element exists.
+      mountGateRef.current?.open();
+
       // Listeners survive custom-element upgrade, so they can be attached
       // before the Presenter runtime script has finished loading.
       const listeners: Array<[string, EventListener]> = [
@@ -204,7 +257,13 @@ export function usePresenter() {
             patch({ status });
 
             if (status === "Ready") markReady();
-            else if (status === "Uninitialized") {
+            else if (status === "Uninitialized" && readyRef.current) {
+              /*
+               * Only meaningful once a session has actually been established.
+               * A fresh element reports `Uninitialized` on the way up, and
+               * replacing the gate there would strand the `connect()` that is
+               * waiting on it — nothing would ever open the gate it holds.
+               */
               readyRef.current = false;
               gateRef.current = createReadyGate();
             }
@@ -288,6 +347,13 @@ export function usePresenter() {
         for (const [name, listener] of listeners) {
           element.removeEventListener(name, listener);
         }
+
+        /*
+         * React 19 runs this cleanup *instead of* calling the ref with `null`,
+         * so nothing else clears the pointer. Left set, every later call would
+         * be made against an element that is no longer in the document.
+         */
+        if (elementRef.current === element) elementRef.current = null;
       };
     },
     [markReady, patch]
@@ -337,53 +403,128 @@ export function usePresenter() {
     const element = () => elementRef.current;
 
     return {
-      /** Loads the regional runtime and initializes with a Publishable key. */
+      /**
+       * Loads the regional runtime and initializes with a Publishable key.
+       *
+       * Calling this with a target that differs from the live one re-targets
+       * the stage: the element is replaced and initialized again, because
+       * `initializeWithConnectKey()` binds an element to one Avatar and Scene
+       * for its lifetime and the contract exposes no way to change them.
+       */
       async connect(
         region: Region,
         connectKey: string,
         target: PresentationTarget
       ) {
-        if (readyRef.current) return true;
-        if (gateRef.current) return awaitReady(READY_TIMEOUT_MS);
+        const key = targetKey(target);
 
-        patch({
-          phase: "connecting",
-          error: null,
-          progress: null,
-          status: "Initializing",
-        });
-
-        readyRef.current = false;
-        const readyGate = createReadyGate();
-        gateRef.current = readyGate;
-
-        try {
-          await loadPresenterRuntime(region);
-          const presenter = elementRef.current;
-          if (!presenter) throw new Error("Presenter is not mounted");
-
-          await presenter.initializeWithConnectKey(connectKey, target);
-
-          const ready = await waitForGate(readyGate, READY_TIMEOUT_MS);
-          if (!ready) {
-            throw new Error(
-              "The avatar never finished initializing. Check that the Avatar, Scene, and Voice IDs belong to this Connect key’s organization and region."
-            );
-          }
-
-          readyRef.current = true;
-          patch({ phase: "live", status: "Ready", progress: null });
-          return true;
-        } catch (error) {
-          patch({
-            phase: "error",
-            error:
-              error instanceof Error
-                ? error.message
-                : "Could not connect to Perxona",
-          });
-          return false;
+        // Already on this exact target, or already on the way to it.
+        if (activeTargetRef.current === key) {
+          if (readyRef.current) return true;
+          if (gateRef.current) return awaitReady(READY_TIMEOUT_MS);
         }
+
+        const seq = ++connectSeqRef.current;
+        const superseded = () => connectSeqRef.current !== seq;
+
+        const previous = runRef.current;
+        const readyGate = createReadyGate();
+        let mountGate: ReadyGate | null = null;
+
+        // Opens whatever the outgoing attempt is blocked on so it retires at
+        // its next checkpoint instead of holding the element for a full
+        // timeout. `superseded()` is what actually stops it.
+        const abort = () => {
+          readyGate.open();
+          mountGate?.open();
+        };
+
+        const done = (async () => {
+          if (previous) {
+            previous.abort();
+            await previous.done.catch(() => {});
+          }
+          if (superseded()) return false;
+
+          activeTargetRef.current = key;
+          readyRef.current = false;
+          gateRef.current = readyGate;
+
+          patch({
+            phase: "connecting",
+            error: null,
+            progress: null,
+            status: "Initializing",
+            // The outgoing avatar's last line does not belong to this one.
+            caption: "",
+            speaking: false,
+            performanceState: "Idle",
+          });
+
+          try {
+            await loadPresenterRuntime(region);
+            if (superseded()) return false;
+
+            // An element that has already been initialized — even by an
+            // attempt that then failed — cannot be initialized again.
+            if (initializedRef.current) {
+              // Cut the outgoing voice off rather than letting its audio
+              // outlive the element that owns it.
+              elementRef.current?.interruptPresentation();
+
+              mountGate = createReadyGate();
+              mountGateRef.current = mountGate;
+              setInstanceKey((current) => current + 1);
+
+              const mounted = await waitForGate(mountGate, REMOUNT_TIMEOUT_MS);
+              mountGateRef.current = null;
+              if (superseded()) return false;
+              if (!mounted) {
+                throw new Error(
+                  "The Presenter element never remounted for the new Avatar and Scene."
+                );
+              }
+              initializedRef.current = false;
+            }
+
+            const presenter = elementRef.current;
+            if (!presenter) throw new Error("Presenter is not mounted");
+
+            initializedRef.current = true;
+            await presenter.initializeWithConnectKey(connectKey, target);
+            if (superseded()) return false;
+
+            const ready = await waitForGate(readyGate, READY_TIMEOUT_MS);
+            if (superseded()) return false;
+
+            if (!ready) {
+              throw new Error(
+                "The avatar never finished initializing. Check that the Avatar, Scene, and Voice IDs belong to this Connect key’s organization and region."
+              );
+            }
+
+            readyRef.current = true;
+            patch({ phase: "live", status: "Ready", progress: null });
+            return true;
+          } catch (error) {
+            if (superseded()) return false;
+
+            // Forget the target so a retry re-initializes instead of treating
+            // the one that just failed as the live session.
+            activeTargetRef.current = null;
+            patch({
+              phase: "error",
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Could not connect to Perxona",
+            });
+            return false;
+          }
+        })();
+
+        runRef.current = { done, abort };
+        return done;
       },
 
       resumeAudio() {
@@ -444,14 +585,23 @@ export function usePresenter() {
       },
 
       reset() {
+        // Retires any attempt in flight so it cannot report back into a
+        // session that no longer exists.
+        connectSeqRef.current += 1;
+        runRef.current?.abort();
+        runRef.current = null;
+
         readyRef.current = false;
         gateRef.current = null;
+        mountGateRef.current = null;
+        activeTargetRef.current = null;
+        initializedRef.current = false;
         setState(INITIAL_STATE);
       },
     };
   }, [patch, run]);
 
-  return { ref, state, actions };
+  return { ref, instanceKey, state, actions };
 }
 
 export type PresenterActions = ReturnType<typeof usePresenter>["actions"];

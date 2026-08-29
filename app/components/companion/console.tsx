@@ -1,10 +1,9 @@
 'use client';
 
-import { ArrowRight, ChevronLeft, Plus } from 'lucide-react';
+import { ArrowRight, ChevronLeft } from 'lucide-react';
 
-import { ScenePreview } from './avatar-portrait';
 import { ChipListInput, ChoiceRow, Field, SectionCard } from './controls';
-import { SCENE_PRESETS } from '@/lib/companion/defaults';
+import { AVATAR_PRESETS, SCENE_PRESETS } from '@/lib/companion/defaults';
 import { AGE_BANDS, GENDERS, type Prescription } from '@/lib/companion/types';
 
 const BOUNDARY_SUGGESTIONS = [
@@ -42,6 +41,33 @@ export function Console({
     value: Partial<Prescription[K]>,
   ) => {
     onChange({ ...prescription, [key]: { ...prescription[key], ...value } });
+  };
+
+  const currentCompanion = persona.companions[0] ?? {
+    presetId: 'custom',
+    calledName: 'Companion',
+    avatarId: '',
+    voiceId: '',
+  };
+
+  const patchCompanion = (patch_: Partial<typeof currentCompanion>) => {
+    patch('avatar_persona', {
+      companions: [{ ...currentCompanion, ...patch_ }],
+    });
+  };
+
+  /**
+   * Picking an avatar moves the whole preset, not just the ID: the slug and
+   * Voice travel with it, so the portrait on stage and the voice that speaks
+   * both follow the choice instead of staying on the plan's original preset.
+   */
+  const chooseAvatar = (avatarId: string) => {
+    const preset = AVATAR_PRESETS.find((entry) => entry.avatarId === avatarId);
+    patchCompanion({
+      avatarId,
+      presetId: preset?.id ?? 'custom',
+      voiceId: preset?.voiceId ?? currentCompanion.voiceId,
+    });
   };
 
   // A disabled button that will not say why is a dead end, so the same three
@@ -129,9 +155,7 @@ export function Console({
                 <ChoiceRow
                   options={AGE_BANDS}
                   value={patient.age_band}
-                  onChange={(age_band) =>
-                    patch('patient_profile', { age_band })
-                  }
+                  onChange={(age_band) => patch('patient_profile', { age_band })}
                 />
               </Field>
             </div>
@@ -141,113 +165,44 @@ export function Console({
           <SectionCard
             step="2"
             title="Companion"
-            caption="Pick one or two, name them, and choose where you meet."
+            caption="Pick an avatar, name them, and choose where you meet."
             accent="var(--sol-surgical)"
           >
             <div className="space-y-6">
+              <Field label="Avatar">
+                <ChoiceRow
+                  options={AVATAR_PRESETS.map((preset) => ({
+                    value: preset.avatarId,
+                    label: preset.name,
+                  }))}
+                  value={currentCompanion.avatarId}
+                  onChange={chooseAvatar}
+                />
+              </Field>
+
               <Field
-                label="Customize your avatar"
-                hint="Change the companion's appearance, voice, and name."
+                label="Companion Name"
+                hint="What the child calls them (e.g., Kak Sara)."
               >
-                <div className="space-y-3">
-                  <div>
-                    <span className="solace-label mb-1.5 block">Avatar ID</span>
-                    <input
-                      value={persona.companions[0]?.avatarId ?? ''}
-                      onChange={(event) => {
-                        const current = persona.companions[0] ?? {
-                          presetId: 'custom',
-                          calledName: 'Companion',
-                          avatarId: '',
-                          voiceId: '',
-                        };
-                        patch('avatar_persona', {
-                          companions: [
-                            { ...current, avatarId: event.target.value },
-                          ],
-                        });
-                      }}
-                      placeholder="Enter Avatar ID"
-                      className="solace-field"
-                    />
-                  </div>
-                  <div>
-                    <span className="solace-label mb-1.5 block">Voice ID</span>
-                    <input
-                      value={persona.companions[0]?.voiceId ?? ''}
-                      onChange={(event) => {
-                        const current = persona.companions[0] ?? {
-                          presetId: 'custom',
-                          calledName: 'Companion',
-                          avatarId: '',
-                          voiceId: '',
-                        };
-                        patch('avatar_persona', {
-                          companions: [
-                            { ...current, voiceId: event.target.value },
-                          ],
-                        });
-                      }}
-                      placeholder="Enter Voice ID"
-                      className="solace-field"
-                    />
-                  </div>
-                  <div>
-                    <span className="solace-label mb-1.5 block">
-                      Companion Name
-                    </span>
-                    <input
-                      value={persona.companions[0]?.calledName ?? ''}
-                      onChange={(event) => {
-                        const current = persona.companions[0] ?? {
-                          presetId: 'custom',
-                          calledName: 'Companion',
-                          avatarId: '',
-                          voiceId: '',
-                        };
-                        patch('avatar_persona', {
-                          companions: [
-                            { ...current, calledName: event.target.value },
-                          ],
-                        });
-                      }}
-                      placeholder="What the child calls them (e.g., Kak Sara)"
-                      className="solace-field"
-                    />
-                  </div>
-                </div>
+                <input
+                  value={currentCompanion.calledName}
+                  onChange={(event) =>
+                    patchCompanion({ calledName: event.target.value })
+                  }
+                  placeholder="What the child calls them (e.g., Kak Sara)"
+                  className="solace-field"
+                />
               </Field>
 
               <Field label="Scene">
-                <div className="flex flex-wrap gap-2.5">
-                  {SCENE_PRESETS.map((scene) => (
-                    <button
-                      key={scene.id}
-                      type="button"
-                      data-selected={persona.sceneId === scene.id}
-                      onClick={() =>
-                        patch('avatar_persona', { sceneId: scene.id })
-                      }
-                      className="solace-tile w-[124px] p-2.5"
-                    >
-                      <ScenePreview
-                        gradient={scene.gradient}
-                        className="h-[68px] w-full"
-                      />
-                      <span className="mt-2 block text-[12.5px] font-medium">
-                        {scene.name}
-                      </span>
-                    </button>
-                  ))}
-
-                  <button
-                    type="button"
-                    title="Import another scene from the organization catalog"
-                    className="grid h-[122px] w-[124px] place-items-center rounded-[4px] border border-dashed border-[var(--sol-rule-strong)] text-[var(--sol-ink-faint)] transition hover:border-[var(--sol-surgical)] hover:text-[var(--sol-surgical)]"
-                  >
-                    <Plus className="size-5" />
-                  </button>
-                </div>
+                <ChoiceRow
+                  options={SCENE_PRESETS.map((scene) => ({
+                    value: scene.sceneId,
+                    label: scene.name,
+                  }))}
+                  value={persona.sceneId}
+                  onChange={(sceneId) => patch('avatar_persona', { sceneId })}
+                />
               </Field>
             </div>
           </SectionCard>
@@ -302,7 +257,7 @@ export function Console({
               <ArrowRight className="size-4" />
             </button>
 
-            <p className="mt-3 text-center font-mono text-[11.5px] text-[var(--sol-ink-soft)]">
+            <p className="mt-3 text-center font-mono text-[11.5px] text-[var(--sol-ink-faint)]">
               {ready
                 ? 'The avatar speaks only inside these boundaries.'
                 : `Still needed — ${missing.join(', ')}.`}

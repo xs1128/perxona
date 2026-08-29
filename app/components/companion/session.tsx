@@ -25,6 +25,7 @@ export function Session({
   // `session.ref` makes the compiler treat the whole object as a ref.
   const {
     ref,
+    instanceKey,
     live,
     state,
     preset,
@@ -35,6 +36,7 @@ export function Session({
     performing,
     firedExercise,
     breathing,
+    clearBreathing,
     scripted,
     cue,
     setListening,
@@ -46,9 +48,10 @@ export function Session({
   const [cueOpen, setCueOpen] = useState(false);
 
   const mic = useSpeechRecognition({
-    // The avatar speaks out of the same speakers the microphone hears, so its
-    // own voice would come back as the patient's next utterance.
-    paused: thinking || speaking,
+    // Only the avatar's own voice has to be ignored — it plays out of the same
+    // speakers the microphone hears. While it thinks the stage is silent, so
+    // everything the mic picks up is the patient and must go through.
+    paused: speaking,
     onResult: (transcript) => {
       void session.send(transcript);
     },
@@ -176,6 +179,13 @@ export function Session({
               ? { label: 'Listening for you', tone: '#ffffff' }
               : { label: 'Rehearsal mode', tone: '#ffffff' };
 
+  /*
+   * The microphone is armed but discarding audio — never a mystery silence:
+   * the button drops its recording look so "I talk and nothing happens" is
+   * not what a paused mic looks like.
+   */
+  const micStandby = mic.listening && speaking;
+
   return (
     <div className="solace-panel solace-ground relative overflow-hidden">
       {/*
@@ -183,6 +193,10 @@ export function Session({
         never `display: none` — a hidden element gives the renderer a 0x0
         canvas, and the Presenter can stall at `Initializing` rather than
         reaching `Ready`. It fades in instead.
+
+        `key` is load-bearing: an element is bound to the Avatar and Scene it
+        was initialized with, so `usePresenter` changes the target by bumping
+        this and initializing the replacement.
       */}
       <div
         className={`absolute inset-0 transition-opacity duration-500 ${
@@ -190,7 +204,11 @@ export function Session({
         }`}
       >
         {/* @ts-expect-error sv-presenter is provided by the Perxona runtime. */}
-        <sv-presenter ref={ref} className="block h-full w-full" />
+        <sv-presenter
+          key={instanceKey}
+          ref={ref}
+          className="block h-full w-full"
+        />
       </div>
 
       {/* Stand-in stage when no catalog IDs are configured. */}
@@ -424,11 +442,11 @@ export function Session({
         */}
         {breathingActive ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-32 z-20 flex justify-center sm:bottom-36">
-            <BreathingGuide pattern={breathing} />
+            <BreathingGuide onComplete={clearBreathing} />
           </div>
         ) : null}
 
-        {scripted && cueOpen ? (
+        {scripted && cueOpen && !breathingActive ? (
           <div className="mx-auto w-full max-w-2xl px-5 sm:px-7">
             <div className="rounded-2xl border border-white/14 bg-black/55 px-4 py-3 backdrop-blur">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/40">

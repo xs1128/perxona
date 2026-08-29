@@ -8,6 +8,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from '@/components/ui/native-select';
+import { KNOWN_AVATARS } from '@/lib/perxona/catalog';
 import type { useCatalog } from '@/lib/perxona/use-catalog';
 import type { ConnectConfig, Region } from '@/lib/perxona/types';
 
@@ -22,6 +23,7 @@ type SetupPanelProps = {
   error: string | null;
 };
 
+/** Built-in avatars shown by name, even before the org catalog is loaded. */
 /** Picks from the loaded catalog when it is available, types an ID when not. */
 function IdField({
   id,
@@ -78,6 +80,11 @@ export function SetupPanel({
   error,
 }: SetupPanelProps) {
   const message = error ?? catalog.error;
+
+  // Prefer the org catalog once it's loaded; otherwise fall back to the
+  // built-in avatar list so the field is always a name-based dropdown.
+  const avatarOptions =
+    catalog.avatars.length > 0 ? catalog.avatars : KNOWN_AVATARS;
 
   return (
     <div className="z-20 m-auto w-full max-w-md p-6 sm:p-10">
@@ -151,8 +158,8 @@ export function SetupPanel({
             label="Avatar"
             value={config.avatarId}
             onChange={(avatarId) => onChange({ avatarId })}
-            options={catalog.avatars}
-            placeholder="Required"
+            options={avatarOptions}
+            placeholder="Choose an avatar…"
           />
           <IdField
             id="scene-id"

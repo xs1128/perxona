@@ -1,13 +1,20 @@
 import type { Prescription } from './types';
+import { KNOWN_AVATARS, KNOWN_SCENES } from '@/lib/perxona/catalog';
 
 /*
- * Catalog IDs are organization-specific, so the presets below read from the
- * ignored `.env.local` and degrade to an empty string when a value is absent.
- * An empty avatar or scene ID keeps the console usable in rehearsal mode; only
- * a live session requires the real values.
+ * Every preset below names one entry of `KNOWN_AVATARS` / `KNOWN_SCENES`. They
+ * previously all pointed at one `.env.local` value, which is why choosing a
+ * different companion or scene changed the label and nothing else.
+ *
+ * Deliberately NOT overridable from the environment: the catalog ID is also
+ * the identity of the chip in the console, so an override that happened to
+ * name another entry in the list produced two presets with the same ID —
+ * duplicate React keys, two chips selected at once, and one avatar that could
+ * never be picked. Another organization edits `KNOWN_AVATARS` instead.
+ *
+ * The Voice is a single value shared by every preset, so it has no such
+ * collision and still reads from the environment.
  */
-const ENV_AVATAR = import.meta.env.VITE_PERXONA_AVATAR_ID ?? '';
-const ENV_SCENE = import.meta.env.VITE_PERXONA_SCENE_ID ?? '';
 const ENV_VOICE = import.meta.env.VITE_PERXONA_VOICE_ID ?? '';
 
 export type AvatarPreset = {
@@ -17,7 +24,10 @@ export type AvatarPreset = {
   /** Two stops for the placeholder portrait until real thumbnails exist. */
   gradient: [string, string];
   suggestedNames: string[];
+  /** The Perxona catalog Avatar this preset renders. */
   avatarId: string;
+  /** The catalog's own name for it, for anyone reconciling against Connect. */
+  catalogName: string;
   voiceId: string;
 };
 
@@ -28,16 +38,8 @@ export const AVATAR_PRESETS: AvatarPreset[] = [
     blurb: 'Older sister · warm, unhurried',
     gradient: ['#F2836B', '#F5B36B'],
     suggestedNames: ['Kakak', 'Sis', 'Sara'],
-    avatarId: ENV_AVATAR,
-    voiceId: ENV_VOICE,
-  },
-  {
-    id: 'elder-brother',
-    name: 'Adam',
-    blurb: 'Older brother · steady, plain-spoken',
-    gradient: ['#6C6FE8', '#8FA7F5'],
-    suggestedNames: ['Abang', 'Bro', 'Adam'],
-    avatarId: ENV_AVATAR,
+    avatarId: KNOWN_AVATARS[0].id,
+    catalogName: KNOWN_AVATARS[0].name,
     voiceId: ENV_VOICE,
   },
   {
@@ -46,16 +48,18 @@ export const AVATAR_PRESETS: AvatarPreset[] = [
     blurb: 'Grandmother · slow, story-telling',
     gradient: ['#5FCDC0', '#8FE0C5'],
     suggestedNames: ['Nenek', 'Mama', 'Oma'],
-    avatarId: ENV_AVATAR,
+    avatarId: KNOWN_AVATARS[1].id,
+    catalogName: KNOWN_AVATARS[1].name,
     voiceId: ENV_VOICE,
   },
   {
-    id: 'grandfather',
-    name: 'Atok',
-    blurb: 'Grandfather · calm, patient',
-    gradient: ['#F5C563', '#EFA45B'],
-    suggestedNames: ['Atok', 'Papa', 'Opa'],
-    avatarId: ENV_AVATAR,
+    id: 'playmate',
+    name: 'Pip',
+    blurb: 'Playmate · bright, curious',
+    gradient: ['#6C6FE8', '#8FA7F5'],
+    suggestedNames: ['Pip', 'Kawan', 'Buddy'],
+    avatarId: KNOWN_AVATARS[2].id,
+    catalogName: KNOWN_AVATARS[2].name,
     voiceId: ENV_VOICE,
   },
 ];
@@ -65,30 +69,31 @@ export type ScenePreset = {
   name: string;
   hint: string;
   gradient: [string, string];
+  /** The Perxona catalog Scene this preset renders. */
   sceneId: string;
 };
 
 export const SCENE_PRESETS: ScenePreset[] = [
   {
-    id: 'bedroom',
-    name: 'Bedroom',
-    hint: 'Low light, for night sessions',
+    id: 'lab',
+    name: KNOWN_SCENES[0].name,
+    hint: 'Cool light, clinical and bright',
     gradient: ['#1F4B58', '#2C6D7E'],
-    sceneId: ENV_SCENE,
+    sceneId: KNOWN_SCENES[0].id,
   },
   {
-    id: 'garden',
-    name: 'Garden',
-    hint: 'Daylight, open and calm',
+    id: 'valley',
+    name: KNOWN_SCENES[1].name,
+    hint: 'Warm daylight, open and calm',
     gradient: ['#2A6455', '#4E9A7C'],
-    sceneId: ENV_SCENE,
+    sceneId: KNOWN_SCENES[1].id,
   },
   {
-    id: 'reading-room',
-    name: 'Reading room',
+    id: 'studio',
+    name: KNOWN_SCENES[2].name,
     hint: 'Soft, indoor, quiet',
     gradient: ['#4A3F6B', '#6F5F9B'],
-    sceneId: ENV_SCENE,
+    sceneId: KNOWN_SCENES[2].id,
   },
 ];
 
@@ -147,13 +152,13 @@ export const MIA_PRESCRIPTION: Prescription = {
   avatar_persona: {
     companions: [
       {
-        presetId: 'elder-sister',
+        presetId: AVATAR_PRESETS[0].id,
         calledName: 'Kak Sara',
-        avatarId: ENV_AVATAR,
-        voiceId: ENV_VOICE,
+        avatarId: AVATAR_PRESETS[0].avatarId,
+        voiceId: AVATAR_PRESETS[0].voiceId,
       },
     ],
-    sceneId: 'bedroom',
+    sceneId: SCENE_PRESETS[0].sceneId,
     tone: ['warm', 'peer-like', 'gentle', 'observant'],
     relationship_dynamic: 'supportive_companion',
     style_constraints:
@@ -178,10 +183,15 @@ export const MIA_PRESCRIPTION: Prescription = {
   },
 };
 
-export function findAvatarPreset(id: string) {
-  return AVATAR_PRESETS.find((preset) => preset.id === id);
+/**
+ * Presets are looked up by the catalog ID the plan stores, not by the preset
+ * slug beside it. The ID is what the Presenter is actually initialized with,
+ * so resolving from it is what keeps the portrait honest about who is on stage.
+ */
+export function findAvatarPreset(avatarId: string) {
+  return AVATAR_PRESETS.find((preset) => preset.avatarId === avatarId);
 }
 
-export function findScenePreset(id: string) {
-  return SCENE_PRESETS.find((preset) => preset.id === id);
+export function findScenePreset(sceneId: string) {
+  return SCENE_PRESETS.find((preset) => preset.sceneId === sceneId);
 }

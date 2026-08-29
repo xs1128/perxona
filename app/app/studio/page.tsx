@@ -8,6 +8,7 @@ import { MotionPicker } from '@/components/perxona/motion-picker';
 import { SetupPanel } from '@/components/perxona/setup-panel';
 import { StageControls } from '@/components/perxona/stage-controls';
 import { Button } from '@/components/ui/button';
+import { KNOWN_AVATARS, KNOWN_SCENES } from '@/lib/perxona/catalog';
 import { sanitizeMotionMarkup } from '@/lib/perxona/presenter';
 import type {
   ConnectConfig,
@@ -24,13 +25,13 @@ const DEFAULT_MESSAGE = 'Hello! Welcome to my Perxona experience.';
 const INITIAL_CONFIG: ConnectConfig = {
   region: 'asia',
   connectKey: import.meta.env.VITE_PERXONA_CONNECT_PUBLISHABLE_KEY ?? '',
-  avatarId: import.meta.env.VITE_PERXONA_AVATAR_ID ?? '',
-  sceneId: import.meta.env.VITE_PERXONA_SCENE_ID ?? '',
+  avatarId: import.meta.env.VITE_PERXONA_AVATAR_ID ?? KNOWN_AVATARS[0].id,
+  sceneId: import.meta.env.VITE_PERXONA_SCENE_ID ?? KNOWN_SCENES[0].id,
   voiceId: import.meta.env.VITE_PERXONA_VOICE_ID ?? '',
 };
 
 export default function Home() {
-  const { ref, state, actions } = usePresenter();
+  const { ref, instanceKey, state, actions } = usePresenter();
   const catalog = useCatalog();
 
   const [config, setConfig] = useState<ConnectConfig>(INITIAL_CONFIG);
@@ -249,8 +250,16 @@ export default function Home() {
           <div
             className={`absolute inset-0 z-10 ${liveMode && !setupOpen ? 'block' : 'hidden'}`}
           >
+            {/*
+              `key` lets `usePresenter` swap the element when Setup changes the
+              Avatar or Scene — the runtime cannot re-target a live one.
+            */}
             {/* @ts-expect-error sv-presenter is provided by the Perxona runtime. */}
-            <sv-presenter ref={ref} className="block h-full w-full" />
+            <sv-presenter
+              key={instanceKey}
+              ref={ref}
+              className="block h-full w-full"
+            />
           </div>
         </section>
 

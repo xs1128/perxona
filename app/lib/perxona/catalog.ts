@@ -13,6 +13,30 @@ export type CatalogCredentials = {
   publishableKey: string;
 };
 
+/**
+ * This organization's catalog, transcribed from Connect on 2026-08-29.
+ *
+ * It is the single source of truth for every built-in ID in the app: the
+ * Studio's offline fallback list and the Companion's presets both read from
+ * here. Three copies of these IDs used to drift independently.
+ *
+ * Any other organization must query the Connect endpoints below instead.
+ */
+export const KNOWN_AVATARS: Avatar[] = [
+  { id: '01KVQ57MAC3HT5GWZH5C2J7NZ9', name: 'cc076_female_twtoy_01' },
+  { id: '01KMFR2EGZN6JAWY70K4H77C3S', name: 'cc076a04_female_ntpc_01' },
+  {
+    id: '01KVQ59VW18PC6P2HQET51NMYS',
+    name: 'cc092a01_female_xrspace_mushroom_02',
+  },
+];
+
+export const KNOWN_SCENES: Scene[] = [
+  { id: '01KWVBXE9Q9CZ9FENATQHZYXJV', name: 'High-Tech Lab' },
+  { id: '01KWVBVQBZ5FV2BYKDTQ40V9AF', name: 'Sunset Valley' },
+  { id: '01KQEJD0NJFVM20M588K7D1E9Z', name: 'Food Advisor Studio' },
+];
+
 const PAGE_SIZE = 100;
 
 type UnknownRecord = Record<string, unknown>;
